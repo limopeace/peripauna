@@ -1,64 +1,138 @@
 # Security Guidelines
 
-This document outlines the security measures implemented in the video generation API routes and remaining items to be addressed.
+This document outlines the security measures implemented across all AI generation API routes and application features.
 
-## Implemented Security Measures
+**Last Updated**: 2026-01-20 (Phase 1 MVP Complete)
+**Status**: Production-Ready with documented TODOs
 
-### ✅ Input Validation
+---
+
+## ✅ Phase 1 - IMPLEMENTED Security Measures
+
+### ✅ Authentication & Access Control
+- **Password Protection**: Middleware protects `/canvas` and all `/api` routes
+- **Session Management**: HTTP-only cookies with secure flags in production
+- **Login Page**: Clean UI with rate limiting protection (1s delay on failed attempts)
+- **Session Duration**: 7-day cookie lifetime with `SameSite=strict`
+- **Development Mode**: Warning if `AUTH_TOKEN` not configured
+
+**Files**:
+- `middleware.ts` - Route protection
+- `src/app/api/auth/login/route.ts` - Authentication endpoint
+- `src/app/login/page.tsx` - Login UI
+
+### ✅ Rate Limiting
+- **In-Memory Store**: Singleton rate limiter with automatic cleanup
+- **Per-Endpoint Limits**:
+  - Image Generation: 20 requests/hour per IP
+  - Video Generation: 5 requests/hour per IP
+  - Prompt Enhancement: 50 requests/hour per IP
+  - Global API: 100 requests/hour per IP
+- **Response Headers**: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`
+- **429 Responses**: Clear retry-after messaging
+
+**Files**:
+- `src/lib/services/rateLimiter.ts` - Rate limiting service
+- Applied to: `/api/generate/image`, `/api/generate/video`, `/api/enhance-prompt`
+
+### ✅ Input Validation & Sanitization
 - **Prompt Sanitization**: Removes control characters, limits length to 2000 chars, minimum 3 chars
 - **URL Validation**: Only allows HTTPS URLs, blocks private IPs and localhost
 - **Task ID Validation**: Alphanumeric with underscore/hyphen only, 10-100 chars length
 - **Content-Type Validation**: Requires `application/json`
 - **Request Size Limits**: Maximum 1MB request body
+- **Applied Across**: All generation endpoints (image, video, prompt enhancement)
 
-### ✅ API Security
-- **Timeout Configuration**: 30s for generation, 10s for status checks
+### ✅ API Security & Integration
+- **Timeout Configuration**: 30s for video, 60s for image, 30s for prompt enhancement
 - **Request Timeouts**: AbortController prevents hanging requests
 - **Error Sanitization**: Generic error messages to clients, detailed logging internally
-- **Security Headers**: X-Content-Type-Options, X-Frame-Options on all responses
+- **Security Headers**: Comprehensive headers via `next.config.ts`
+  - `X-Content-Type-Options: nosniff`
+  - `X-Frame-Options: DENY`
+  - `X-XSS-Protection: 1; mode=block`
+  - `Strict-Transport-Security` (HSTS)
+  - `Referrer-Policy: origin-when-cross-origin`
+  - `Permissions-Policy` (camera, microphone, geolocation blocked)
 - **SSRF Prevention**: URL validation prevents internal network access
+- **CORS Configuration**: Configurable via `ALLOWED_ORIGIN` env var (wildcard in dev)
 
-### ✅ Environment Security
-- **API Key Protection**: Loaded from environment variables only
+**APIs Integrated**:
+- BytePlus ModelArk (video generation) - ✅ Production
+- Google Gemini/Imagen 3 (image generation) - ✅ Implemented (needs API key)
+- Claude Haiku (prompt enhancement) - ✅ Implemented (needs API key)
+
+### ✅ Environment & Secrets Management
+- **API Key Protection**: All keys loaded from environment variables only
 - **No Hardcoded Secrets**: All sensitive data from .env.local
 - **Git Protection**: .env* files in .gitignore, .env.local.example provided
+- **Multi-Key Support**: ARK_API_KEY, GEMINI_API_KEY, CLAUDE_API_KEY, AUTH_PASSWORD, AUTH_TOKEN
+- **Test Mode**: `TEST_MODE=true` for development without API calls
+- **Comprehensive Documentation**: .env.local.example with setup instructions
+
+**Environment Variables**:
+```bash
+AUTH_PASSWORD       # App-wide password protection
+AUTH_TOKEN          # Session authentication token
+ARK_API_KEY         # BytePlus ModelArk (video)
+GEMINI_API_KEY      # Google Gemini/Imagen (images)
+CLAUDE_API_KEY      # Claude API (prompt enhancement)
+TEST_MODE           # Enable mock responses
+ALLOWED_ORIGIN      # CORS restriction (production)
+```
+
+### ✅ Error Handling & Monitoring
+- **Error Boundaries**: React Error Boundary component for graceful UI degradation
+- **Global Error Handlers**: Next.js `error.tsx` and `global-error.tsx` files
+- **Structured Logging**: Consistent error logging format with timestamps
+- **User-Friendly Errors**: Generic messages to users, detailed logs for debugging
+- **Error Recovery**: Reset/retry buttons in error UIs
+- **TODO Integration Points**: Sentry/DataDog placeholders for production monitoring
+
+**Files**:
+- `src/components/ErrorBoundary.tsx` - React error boundary
+- `src/app/error.tsx` - Next.js error page
+- `src/app/global-error.tsx` - Global critical error handler
 
 ### ✅ Data Validation
 - **Response Validation**: Checks for required fields before returning to client
-- **URL Validation**: Validates video URLs from external API (HTTPS only)
+- **URL Validation**: Validates all URLs from external APIs (HTTPS only)
 - **Progress Validation**: Uses nullish coalescing to handle 0 progress correctly
+- **Type Safety**: TypeScript interfaces for all API requests/responses
 
-## 🚨 Critical TODOs (Must Implement)
+---
 
-### 1. Authentication & Authorization
-**Priority**: CRITICAL - Implement immediately before production
+## 🚨 Phase 2 - CRITICAL TODOs (Production Hardening)
 
-```typescript
-// Add to all routes
-const session = await getServerSession(authOptions);
-if (!session) {
-  return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-}
-```
+### 1. ✅ DONE - Authentication & Authorization
+**Status**: ✅ **IMPLEMENTED** in Phase 1
+- Simple password protection via middleware
+- Session-based authentication with HTTP-only cookies
+- Login UI with error handling
 
-**Recommended**: Use NextAuth.js or similar authentication library
+**Next Steps for Production**:
+- [ ] Migrate to user-based authentication (NextAuth.js or Supabase Auth)
+- [ ] Add password reset functionality
+- [ ] Implement 2FA for admin accounts
+- [ ] Add audit logging for authentication events
 
-### 2. Rate Limiting
-**Priority**: CRITICAL - Prevents API abuse and cost overruns
+### 2. ✅ DONE - Rate Limiting
+**Status**: ✅ **IMPLEMENTED** in Phase 1 (In-Memory)
+- In-memory rate limiter with configurable limits
+- Per-IP rate limiting on all generation endpoints
+- Rate limit headers in responses
 
-```typescript
-// Implement per-user rate limiting
-// Suggestion: Use Upstash Redis with @upstash/ratelimit
-// Limit: 10 video generations per 15 minutes per user
-```
-
-**Recommended**: Use Upstash Redis or similar edge-compatible rate limiter
+**Next Steps for Production Scaling**:
+- [ ] Migrate to Upstash Redis for distributed rate limiting
+- [ ] Implement per-user rate limiting (after user auth)
+- [ ] Add configurable quotas per user tier
+- [ ] Implement rate limit bypass for admin users
 
 ### 3. Task Ownership Verification
-**Priority**: HIGH - Prevents users from accessing others' tasks
+**Priority**: HIGH - Requires database implementation
 
 ```typescript
-// Add to status route
+// Add to status route after implementing user auth + database
 const task = await db.task.findFirst({
   where: { id: taskId, userId: session.user.id }
 });
@@ -66,6 +140,12 @@ if (!task) {
   return NextResponse.json({ error: "Task not found" }, { status: 404 });
 }
 ```
+
+**Requirements**:
+- [ ] Set up database (PostgreSQL via Supabase recommended)
+- [ ] Create tasks table with userId foreign key
+- [ ] Implement Row Level Security (RLS) policies
+- [ ] Add task ownership checks to status routes
 
 ## ⚠️ Important TODOs
 

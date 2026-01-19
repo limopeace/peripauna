@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { VideoSettings } from "@/types/nodes";
+import {
+  getRateLimiter,
+  RATE_LIMITS,
+  getRateLimitKey,
+  formatResetTime,
+} from "@/lib/services/rateLimiter";
 
 // ============================================
 // Video Generation API Route - BytePlus ModelArk
@@ -99,11 +105,30 @@ function generateRequestKey(): string {
 
 export async function POST(request: NextRequest) {
   try {
-    // TODO: Add authentication check
-    // const session = await getServerSession(authOptions);
-    // if (!session) {
-    //   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    // }
+    // Rate limiting
+    const ip = request.headers.get("x-forwarded-for") || "unknown";
+    const rateLimitKey = getRateLimitKey(ip, "VIDEO_GENERATION");
+    const rateLimiter = getRateLimiter();
+    const limitResult = await rateLimiter.checkLimit(
+      rateLimitKey,
+      RATE_LIMITS.VIDEO_GENERATION
+    );
+
+    // Set rate limit headers
+    const rateLimitHeaders = new Headers();
+    rateLimitHeaders.set("X-RateLimit-Limit", limitResult.limit.toString());
+    rateLimitHeaders.set("X-RateLimit-Remaining", limitResult.remaining.toString());
+    rateLimitHeaders.set("X-RateLimit-Reset", formatResetTime(limitResult.resetAt));
+
+    if (!limitResult.allowed) {
+      return NextResponse.json(
+        {
+          error: "Rate limit exceeded for video generation",
+          retryAfter: formatResetTime(limitResult.resetAt),
+        },
+        { status: 429, headers: rateLimitHeaders }
+      );
+    }
 
     // Security: Check content-length
     const contentLength = request.headers.get("content-length");
