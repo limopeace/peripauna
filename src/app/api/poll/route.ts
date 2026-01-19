@@ -8,6 +8,14 @@ import { imagePredictions } from "../generate/image/route";
 // - Images: Uses in-memory predictions (for mock/demo)
 // - Videos: Proxies to BytePlus status endpoint
 
+/**
+ * Validate task ID format
+ */
+function validateTaskId(taskId: string): boolean {
+  // Alphanumeric, underscore, hyphen only, reasonable length
+  return /^[a-zA-Z0-9_-]{10,100}$/.test(taskId);
+}
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
 
@@ -33,32 +41,82 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({
-      predictionId,
-      status: prediction.status,
-      output: prediction.output,
-      error: prediction.error,
-    });
+    // Security headers
+    const headers = new Headers();
+    headers.set("X-Content-Type-Options", "nosniff");
+    headers.set("X-Frame-Options", "DENY");
+
+    return NextResponse.json(
+      {
+        predictionId,
+        status: prediction.status,
+        output: prediction.output,
+        error: prediction.error,
+      },
+      { headers }
+    );
   }
 
   // Check for video task - proxy to BytePlus status endpoint
   const taskId = searchParams.get("taskId");
   if (taskId) {
+    // Security: Validate taskId format to prevent SSRF
+    if (!validateTaskId(taskId)) {
+      return NextResponse.json(
+        { error: "Invalid task ID format" },
+        { status: 400 }
+      );
+    }
+
     // Proxy to the BytePlus status endpoint
     const baseUrl = request.nextUrl.origin;
-    const statusUrl = `${baseUrl}/api/generate/video/status?taskId=${taskId}`;
+    const statusUrl = new URL("/api/generate/video/status", baseUrl);
+    statusUrl.searchParams.set("taskId", taskId);
 
     try {
-      const response = await fetch(statusUrl);
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      const response = await fetch(statusUrl.toString(), {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
       const data = await response.json();
 
       if (!response.ok) {
         return NextResponse.json(data, { status: response.status });
       }
 
-      return NextResponse.json(data);
+      // Validate response structure
+      if (!data.taskId || !data.status) {
+        console.error("Invalid response structure from video status:", data);
+        return NextResponse.json(
+          { error: "Invalid response from video generation service" },
+          { status: 500 }
+        );
+      }
+
+      // Security headers
+      const headers = new Headers();
+      headers.set("X-Content-Type-Options", "nosniff");
+      headers.set("X-Frame-Options", "DENY");
+
+      return NextResponse.json(data, { headers });
     } catch (error) {
-      console.error("Error polling video status:", error);
+      if ((error as Error).name === "AbortError") {
+        return NextResponse.json(
+          { error: "Request timeout" },
+          { status: 504 }
+        );
+      }
+
+      console.error("Error polling video status:", {
+        error: error instanceof Error ? error.message : "Unknown error",
+        timestamp: new Date().toISOString(),
+      });
+
       return NextResponse.json(
         { error: "Failed to check video status" },
         { status: 500 }

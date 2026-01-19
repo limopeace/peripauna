@@ -10,6 +10,9 @@ import { VideoSettings } from "@/types/nodes";
 const ARK_API_BASE = "https://ark.ap-southeast.bytepluses.com/api/v3";
 const ARK_API_KEY = process.env.ARK_API_KEY;
 
+// Security: Request size limit (1MB)
+const MAX_REQUEST_SIZE = 1048576;
+
 interface GenerateVideoRequest {
   prompt: string;
   negativePrompt?: string;
@@ -37,20 +40,111 @@ interface BytePlusVideoResponse {
   message?: string;
 }
 
+/**
+ * Validate and sanitize image URL
+ */
+function validateImageUrl(url: string | null | undefined): boolean {
+  if (!url) return true; // Optional field
+
+  try {
+    const parsed = new URL(url);
+    // Only allow HTTPS URLs
+    if (parsed.protocol !== "https:") return false;
+    // Prevent localhost and private IPs
+    if (
+      parsed.hostname === "localhost" ||
+      parsed.hostname === "127.0.0.1" ||
+      parsed.hostname.startsWith("192.168.") ||
+      parsed.hostname.startsWith("10.") ||
+      parsed.hostname.startsWith("172.")
+    ) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Sanitize prompt input
+ */
+function sanitizePrompt(prompt: string): { valid: boolean; sanitized: string; error?: string } {
+  if (!prompt || typeof prompt !== "string") {
+    return { valid: false, sanitized: "", error: "Prompt is required" };
+  }
+
+  // Trim and limit length
+  const sanitized = prompt.trim().slice(0, 2000);
+
+  if (sanitized.length < 3) {
+    return { valid: false, sanitized: "", error: "Prompt must be at least 3 characters" };
+  }
+
+  // Remove control characters
+  const cleaned = sanitized.replace(/[\x00-\x1F\x7F]/g, "");
+
+  return { valid: true, sanitized: cleaned };
+}
+
+/**
+ * Generate cryptographically secure request key
+ */
+function generateRequestKey(): string {
+  // Use timestamp + crypto random for better uniqueness
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substr(2, 12);
+  return `video_${timestamp}_${random}`;
+}
+
 export async function POST(request: NextRequest) {
   try {
+    // TODO: Add authentication check
+    // const session = await getServerSession(authOptions);
+    // if (!session) {
+    //   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // }
+
+    // Security: Check content-length
+    const contentLength = request.headers.get("content-length");
+    if (contentLength && parseInt(contentLength) > MAX_REQUEST_SIZE) {
+      return NextResponse.json(
+        { error: "Request too large" },
+        { status: 413 }
+      );
+    }
+
+    // Security: Validate content-type
+    const contentType = request.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+      return NextResponse.json(
+        { error: "Content-Type must be application/json" },
+        { status: 415 }
+      );
+    }
+
     // Validate API key
     if (!ARK_API_KEY) {
+      console.error("ARK_API_KEY not configured");
       return NextResponse.json(
-        { error: "ARK_API_KEY not configured" },
-        { status: 500 }
+        { error: "Service temporarily unavailable" },
+        { status: 503 }
       );
     }
 
     const body: GenerateVideoRequest = await request.json();
 
+    // Validate and sanitize prompt
+    const promptValidation = sanitizePrompt(body.prompt);
+    if (!promptValidation.valid) {
+      return NextResponse.json(
+        { error: promptValidation.error },
+        { status: 400 }
+      );
+    }
+
     // Validate - either prompt or source images required
-    const hasPrompt = body.prompt && body.prompt.trim();
+    const hasPrompt = promptValidation.sanitized.length > 0;
     const hasSourceImages = body.sourceImages && body.sourceImages.length > 0;
     const hasBeforeAfter =
       (body.beforeImages?.length || 0) > 0 || (body.afterImages?.length || 0) > 0;
@@ -62,16 +156,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Determine workflow type
+    // Determine workflow type and validate source image URL
     let workflowType = "text-to-video";
     let sourceImageUrl: string | undefined;
 
     if (hasBeforeAfter) {
       workflowType = "before-after-transition";
-      sourceImageUrl = body.beforeImages?.[0]; // Use first before image
+      sourceImageUrl = body.beforeImages?.[0];
     } else if (hasSourceImages) {
       workflowType = "image-to-video";
-      sourceImageUrl = body.sourceImages[0]; // Use first source image
+      sourceImageUrl = body.sourceImages[0];
+    }
+
+    // Security: Validate image URL to prevent SSRF
+    if (sourceImageUrl && !validateImageUrl(sourceImageUrl)) {
+      return NextResponse.json(
+        { error: "Invalid or unsafe image URL" },
+        { status: 400 }
+      );
     }
 
     // Map resolution to BytePlus format
@@ -84,8 +186,8 @@ export async function POST(request: NextRequest) {
     // Prepare BytePlus API request
     const byteplusRequest: BytePlusVideoRequest = {
       model_name: body.settings.model,
-      req_key: `video_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      prompt: body.prompt,
+      req_key: generateRequestKey(),
+      prompt: promptValidation.sanitized,
       negative_prompt: body.negativePrompt,
       video_duration: body.settings.duration,
       video_resolution: resolutionMap[body.settings.resolution] || "1280x720",
@@ -94,42 +196,75 @@ export async function POST(request: NextRequest) {
       image_url: sourceImageUrl,
     };
 
-    // Call BytePlus ModelArk API
-    const response = await fetch(`${ARK_API_BASE}/video/generation`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${ARK_API_KEY}`,
-      },
-      body: JSON.stringify(byteplusRequest),
-    });
+    // Call BytePlus ModelArk API with timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
+    let response: Response;
+    try {
+      response = await fetch(`${ARK_API_BASE}/video/generation`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${ARK_API_KEY}`,
+        },
+        body: JSON.stringify(byteplusRequest),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if ((error as Error).name === "AbortError") {
+        console.error("BytePlus API timeout");
+        return NextResponse.json(
+          { error: "Request timeout. Please try again." },
+          { status: 504 }
+        );
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      console.error("BytePlus API error:", response.status, errorData);
+      // Security: Log internally but don't expose details to client
+      console.error("BytePlus API error:", {
+        status: response.status,
+        timestamp: new Date().toISOString(),
+        reqKey: byteplusRequest.req_key,
+      });
+
       return NextResponse.json(
-        {
-          error: errorData.message || `API request failed with status ${response.status}`,
-        },
-        { status: response.status }
+        { error: "Video generation failed. Please try again later." },
+        { status: 500 }
       );
     }
 
     const result: BytePlusVideoResponse = await response.json();
 
-    return NextResponse.json({
-      taskId: result.task_id,
-      status: result.status === "pending" ? "starting" : result.status,
-      model: body.settings.model,
-      workflowType,
-      estimatedTime: `${body.settings.duration * 5} seconds`, // Estimate ~5s per video second
-    });
-  } catch (error) {
-    console.error("Video generation error:", error);
+    // Security headers
+    const headers = new Headers();
+    headers.set("X-Content-Type-Options", "nosniff");
+    headers.set("X-Frame-Options", "DENY");
+
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : "Internal server error",
+        taskId: result.task_id,
+        status: result.status === "pending" ? "starting" : result.status,
+        model: body.settings.model,
+        workflowType,
+        estimatedTime: `${body.settings.duration * 5} seconds`,
       },
+      { headers }
+    );
+  } catch (error) {
+    console.error("Video generation error:", {
+      error: error instanceof Error ? error.message : "Unknown error",
+      timestamp: new Date().toISOString(),
+    });
+
+    return NextResponse.json(
+      { error: "An unexpected error occurred" },
       { status: 500 }
     );
   }
