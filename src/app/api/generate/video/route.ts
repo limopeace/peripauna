@@ -1,31 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { v4 as uuidv4 } from "uuid";
 import { VideoSettings } from "@/types/nodes";
 
 // ============================================
-// Video Generation API Route
+// Video Generation API Route - BytePlus ModelArk
 // ============================================
-// POST: Initiates video generation
+// POST: Initiates video generation via BytePlus ModelArk API
 // Returns task ID for polling
 
-// In-memory storage for demo
-const videoTasks = new Map<
-  string,
-  {
-    status: "starting" | "processing" | "succeeded" | "failed";
-    output?: string;
-    error?: string;
-    createdAt: Date;
-    progress?: number;
-  }
->();
-
-// Mock video URLs for testing
-const MOCK_VIDEO_OUTPUTS = [
-  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
-  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-];
+const ARK_API_BASE = "https://ark.ap-southeast.bytepluses.com/api/v3";
+const ARK_API_KEY = process.env.ARK_API_KEY;
 
 interface GenerateVideoRequest {
   prompt: string;
@@ -36,8 +19,34 @@ interface GenerateVideoRequest {
   settings: VideoSettings;
 }
 
+interface BytePlusVideoRequest {
+  model_name: string;
+  req_key: string;
+  prompt: string;
+  negative_prompt?: string;
+  video_duration: number;
+  video_resolution: string;
+  fps: number;
+  seed?: number;
+  image_url?: string;
+}
+
+interface BytePlusVideoResponse {
+  task_id: string;
+  status: "pending" | "processing" | "success" | "failed";
+  message?: string;
+}
+
 export async function POST(request: NextRequest) {
   try {
+    // Validate API key
+    if (!ARK_API_KEY) {
+      return NextResponse.json(
+        { error: "ARK_API_KEY not configured" },
+        { status: 500 }
+      );
+    }
+
     const body: GenerateVideoRequest = await request.json();
 
     // Validate - either prompt or source images required
@@ -53,84 +62,75 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate task ID
-    const taskId = uuidv4();
-
-    // Store initial task state
-    videoTasks.set(taskId, {
-      status: "starting",
-      createdAt: new Date(),
-      progress: 0,
-    });
-
-    // In production, you would call:
-    // - BytePlus ModelArk API for Seedance
-    // - Replicate API for Runway/Kling
-    // - etc.
-
-    // Simulate async generation
-    setTimeout(() => {
-      const task = videoTasks.get(taskId);
-      if (task) {
-        task.status = "processing";
-        task.progress = 10;
-      }
-    }, 500);
-
-    // Simulate progress updates
-    const duration = body.settings.duration || 5;
-    const totalTime = duration * 2000; // ~2 seconds per video second for demo
-    const progressInterval = setInterval(() => {
-      const task = videoTasks.get(taskId);
-      if (task && task.status === "processing") {
-        task.progress = Math.min(90, (task.progress || 0) + 10);
-      }
-    }, totalTime / 10);
-
-    // Simulate completion
-    setTimeout(() => {
-      clearInterval(progressInterval);
-      const task = videoTasks.get(taskId);
-      if (task) {
-        // 95% success rate for demo
-        if (Math.random() > 0.05) {
-          task.status = "succeeded";
-          task.output =
-            MOCK_VIDEO_OUTPUTS[
-              Math.floor(Math.random() * MOCK_VIDEO_OUTPUTS.length)
-            ];
-          task.progress = 100;
-        } else {
-          task.status = "failed";
-          task.error = "Video generation failed - API error";
-          task.progress = 0;
-        }
-      }
-    }, totalTime);
-
-    // Determine workflow type for logging
+    // Determine workflow type
     let workflowType = "text-to-video";
+    let sourceImageUrl: string | undefined;
+
     if (hasBeforeAfter) {
       workflowType = "before-after-transition";
+      sourceImageUrl = body.beforeImages?.[0]; // Use first before image
     } else if (hasSourceImages) {
       workflowType = "image-to-video";
+      sourceImageUrl = body.sourceImages[0]; // Use first source image
     }
 
+    // Map resolution to BytePlus format
+    const resolutionMap: Record<string, string> = {
+      "720p": "1280x720",
+      "1080p": "1920x1080",
+      "4k": "3840x2160",
+    };
+
+    // Prepare BytePlus API request
+    const byteplusRequest: BytePlusVideoRequest = {
+      model_name: body.settings.model,
+      req_key: `video_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      prompt: body.prompt,
+      negative_prompt: body.negativePrompt,
+      video_duration: body.settings.duration,
+      video_resolution: resolutionMap[body.settings.resolution] || "1280x720",
+      fps: body.settings.fps,
+      seed: body.settings.seed,
+      image_url: sourceImageUrl,
+    };
+
+    // Call BytePlus ModelArk API
+    const response = await fetch(`${ARK_API_BASE}/video/generation`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${ARK_API_KEY}`,
+      },
+      body: JSON.stringify(byteplusRequest),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error("BytePlus API error:", response.status, errorData);
+      return NextResponse.json(
+        {
+          error: errorData.message || `API request failed with status ${response.status}`,
+        },
+        { status: response.status }
+      );
+    }
+
+    const result: BytePlusVideoResponse = await response.json();
+
     return NextResponse.json({
-      taskId,
-      status: "starting",
+      taskId: result.task_id,
+      status: result.status === "pending" ? "starting" : result.status,
       model: body.settings.model,
       workflowType,
-      estimatedTime: `${duration * 2} seconds`,
+      estimatedTime: `${body.settings.duration * 5} seconds`, // Estimate ~5s per video second
     });
   } catch (error) {
     console.error("Video generation error:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      {
+        error: error instanceof Error ? error.message : "Internal server error",
+      },
       { status: 500 }
     );
   }
 }
-
-// Export tasks map for polling route
-export { videoTasks };

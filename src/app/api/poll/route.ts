@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { imagePredictions } from "../generate/image/route";
-import { videoTasks } from "../generate/video/route";
 
 // ============================================
 // Poll API Route
 // ============================================
 // GET: Check status of image or video generation
-// Supports both prediction IDs (images) and task IDs (videos)
+// - Images: Uses in-memory predictions (for mock/demo)
+// - Videos: Proxies to BytePlus status endpoint
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -41,29 +41,29 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // Check for video task
+  // Check for video task - proxy to BytePlus status endpoint
   const taskId = searchParams.get("taskId");
   if (taskId) {
-    const task = videoTasks.get(taskId);
+    // Proxy to the BytePlus status endpoint
+    const baseUrl = request.nextUrl.origin;
+    const statusUrl = `${baseUrl}/api/generate/video/status?taskId=${taskId}`;
 
-    if (!task) {
-      return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    try {
+      const response = await fetch(statusUrl);
+      const data = await response.json();
+
+      if (!response.ok) {
+        return NextResponse.json(data, { status: response.status });
+      }
+
+      return NextResponse.json(data);
+    } catch (error) {
+      console.error("Error polling video status:", error);
+      return NextResponse.json(
+        { error: "Failed to check video status" },
+        { status: 500 }
+      );
     }
-
-    // Clean up old tasks
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    if (task.createdAt < oneHourAgo) {
-      videoTasks.delete(taskId);
-      return NextResponse.json({ error: "Task expired" }, { status: 410 });
-    }
-
-    return NextResponse.json({
-      taskId,
-      status: task.status,
-      output: task.output,
-      error: task.error,
-      progress: task.progress,
-    });
   }
 
   return NextResponse.json(
