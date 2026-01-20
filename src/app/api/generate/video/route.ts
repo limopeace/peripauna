@@ -28,35 +28,55 @@ interface GenerateVideoRequest {
   settings: VideoSettings;
 }
 
+// BytePlus Content Generation API request format
 interface BytePlusVideoRequest {
-  model_name: string;
-  req_key: string;
-  prompt: string;
-  negative_prompt?: string;
-  video_duration: number;
-  video_resolution: string;
-  fps: number;
-  seed?: number;
-  image_url?: string;
+  model: string;
+  content: {
+    text: string;
+    image_urls?: string[];
+  }[];
 }
 
+// BytePlus Content Generation API response format
 interface BytePlusVideoResponse {
-  task_id: string;
-  status: "pending" | "processing" | "success" | "failed";
-  message?: string;
+  id: string;  // task ID
+  model: string;
+  status: string;
+  created_at: number;
+  output?: {
+    video_url?: string;
+  };
+  error?: {
+    message: string;
+    code: string;
+  };
 }
 
 /**
  * Validate and sanitize image URL
+ * Supports both HTTPS URLs and data URLs (base64 images)
  */
-function validateImageUrl(url: string | null | undefined): boolean {
-  if (!url) return true; // Optional field
+function validateImageUrl(url: string | null | undefined): { valid: boolean; isDataUrl: boolean } {
+  if (!url) return { valid: true, isDataUrl: false }; // Optional field
+
+  // Allow data URLs for locally uploaded images
+  if (url.startsWith("data:image/")) {
+    // Validate it's a proper data URL format
+    const dataUrlPattern = /^data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/=]+$/;
+    // For very long base64 strings, just check the prefix
+    if (url.length > 100) {
+      const prefix = url.substring(0, 50);
+      const validPrefix = /^data:image\/(png|jpeg|jpg|gif|webp);base64,/.test(prefix);
+      return { valid: validPrefix, isDataUrl: true };
+    }
+    return { valid: dataUrlPattern.test(url), isDataUrl: true };
+  }
 
   try {
     const parsed = new URL(url);
     // Only allow HTTPS URLs
-    if (parsed.protocol !== "https:") return false;
-    // Prevent localhost and private IPs
+    if (parsed.protocol !== "https:") return { valid: false, isDataUrl: false };
+    // Prevent localhost and private IPs (SSRF protection)
     if (
       parsed.hostname === "localhost" ||
       parsed.hostname === "127.0.0.1" ||
@@ -64,11 +84,11 @@ function validateImageUrl(url: string | null | undefined): boolean {
       parsed.hostname.startsWith("10.") ||
       parsed.hostname.startsWith("172.")
     ) {
-      return false;
+      return { valid: false, isDataUrl: false };
     }
-    return true;
+    return { valid: true, isDataUrl: false };
   } catch {
-    return false;
+    return { valid: false, isDataUrl: false };
   }
 }
 
@@ -91,16 +111,6 @@ function sanitizePrompt(prompt: string): { valid: boolean; sanitized: string; er
   const cleaned = sanitized.replace(/[\x00-\x1F\x7F]/g, "");
 
   return { valid: true, sanitized: cleaned };
-}
-
-/**
- * Generate cryptographically secure request key
- */
-function generateRequestKey(): string {
-  // Use timestamp + crypto random for better uniqueness
-  const timestamp = Date.now();
-  const random = Math.random().toString(36).substr(2, 12);
-  return `video_${timestamp}_${random}`;
 }
 
 export async function POST(request: NextRequest) {
@@ -190,44 +200,64 @@ export async function POST(request: NextRequest) {
       sourceImageUrl = body.beforeImages?.[0];
     } else if (hasSourceImages) {
       workflowType = "image-to-video";
-      sourceImageUrl = body.sourceImages[0];
+      sourceImageUrl = body.sourceImages?.[0];
     }
 
     // Security: Validate image URL to prevent SSRF
-    if (sourceImageUrl && !validateImageUrl(sourceImageUrl)) {
-      return NextResponse.json(
-        { error: "Invalid or unsafe image URL" },
-        { status: 400 }
-      );
+    if (sourceImageUrl) {
+      const validation = validateImageUrl(sourceImageUrl);
+      if (!validation.valid) {
+        return NextResponse.json(
+          { error: "Invalid or unsafe image URL" },
+          { status: 400 }
+        );
+      }
+
+      // Handle data URLs (locally uploaded images)
+      // Note: BytePlus API requires publicly accessible HTTPS URLs
+      // Data URLs cannot be used directly - need to be hosted first
+      if (validation.isDataUrl) {
+        return NextResponse.json(
+          {
+            error: "Image-to-video requires a hosted image URL. Local uploads are not yet supported. Please use an image URL (https://) or generate an image first.",
+            code: "DATA_URL_NOT_SUPPORTED"
+          },
+          { status: 400 }
+        );
+      }
     }
 
-    // Map resolution to BytePlus format
-    const resolutionMap: Record<string, string> = {
-      "720p": "1280x720",
-      "1080p": "1920x1080",
-      "4k": "3840x2160",
+    // Map model names to BytePlus model IDs
+    // BytePlus uses versioned model names like "seedance-1-0-lite-250428"
+    const modelMap: Record<string, string> = {
+      "seedance-1.0-lite": "seedance-1-0-lite-250428",
+      "seedance-1.5-pro": "seedance-1-0-pro-250528",
     };
 
-    // Prepare BytePlus API request
+    // Build prompt with parameters (BytePlus uses -- parameters in text)
+    const resolution = body.settings.resolution || "720p";
+    const duration = body.settings.duration || 5;
+    let promptWithParams = promptValidation.sanitized;
+    promptWithParams += ` --resolution ${resolution} --duration ${duration}`;
+    if (body.settings.seed) {
+      promptWithParams += ` --seed ${body.settings.seed}`;
+    }
+
+    // Prepare BytePlus Content Generation API request
     const byteplusRequest: BytePlusVideoRequest = {
-      model_name: body.settings.model,
-      req_key: generateRequestKey(),
-      prompt: promptValidation.sanitized,
-      negative_prompt: body.negativePrompt,
-      video_duration: body.settings.duration,
-      video_resolution: resolutionMap[body.settings.resolution] || "1280x720",
-      fps: body.settings.fps,
-      seed: body.settings.seed,
-      image_url: sourceImageUrl,
+      model: modelMap[body.settings.model] || body.settings.model,
+      content: sourceImageUrl
+        ? [{ text: promptWithParams, image_urls: [sourceImageUrl] }]
+        : [{ text: promptWithParams }],
     };
 
-    // Call BytePlus ModelArk API with timeout
+    // Call BytePlus ModelArk Content Generation API with timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
     let response: Response;
     try {
-      response = await fetch(`${ARK_API_BASE}/video/generation`, {
+      response = await fetch(`${ARK_API_BASE}/content_generation/tasks`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -252,15 +282,24 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      // Security: Log internally but don't expose details to client
+      // Log full error details for debugging
       console.error("BytePlus API error:", {
         status: response.status,
         timestamp: new Date().toISOString(),
-        reqKey: byteplusRequest.req_key,
+        model: byteplusRequest.model,
+        errorData: JSON.stringify(errorData),
+        requestBody: JSON.stringify(byteplusRequest),
       });
 
+      // Return more helpful error message in development
+      const isDev = process.env.NODE_ENV === "development";
       return NextResponse.json(
-        { error: "Video generation failed. Please try again later." },
+        {
+          error: isDev
+            ? `BytePlus API error (${response.status}): ${JSON.stringify(errorData)}`
+            : "Video generation failed. Please try again later.",
+          status: response.status
+        },
         { status: 500 }
       );
     }
@@ -274,8 +313,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       {
-        taskId: result.task_id,
-        status: result.status === "pending" ? "starting" : result.status,
+        taskId: result.id,  // BytePlus uses 'id' not 'task_id'
+        status: "starting",
         model: body.settings.model,
         workflowType,
         estimatedTime: `${body.settings.duration * 5} seconds`,

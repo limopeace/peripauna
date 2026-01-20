@@ -388,9 +388,27 @@ npm run dev
 - **Production**: Middleware works immediately on deployment
 
 ### API Keys Status
-- **BytePlus (ARK_API_KEY)**: ✅ Provided and active
+- **BytePlus (ARK_API_KEY)**: ⚠️ Provided but API endpoint needs verification
 - **Gemini (GEMINI_API_KEY)**: ⚠️ Needs your key (or use TEST_MODE)
 - **Claude (CLAUDE_API_KEY)**: ⚠️ Needs your key (or use TEST_MODE)
+
+### ⚠️ BytePlus API Integration Status
+**Current Issue**: The BytePlus ModelArk API endpoint structure needs verification.
+
+**What's been done**:
+- Updated to use Content Generation API (`/content_generation/tasks`)
+- Request format follows Python SDK pattern
+- Authentication via Bearer token
+
+**What needs verification**:
+1. Confirm the exact API endpoint path with BytePlus documentation
+2. Verify the API key format (UUID vs API key string)
+3. Test with BytePlus support if endpoint returns 404
+
+**Fallback Options**:
+- Use AI/ML API as a BytePlus proxy (`https://api.aimlapi.com`)
+- Direct integration with BytePlus Python SDK
+- Alternative video generation service (Replicate)
 
 ### Test Mode
 - **Enabled by default** in current .env.local for cost-free development
@@ -398,6 +416,20 @@ npm run dev
 - **Image generation**: Uses mock Unsplash URLs with realistic delays (2-5s)
 - **Prompt enhancement**: Returns simple mock improvements
 - **Video generation**: No test mode (uses real BytePlus API)
+
+### ⚠️ Image-to-Video Limitation
+**Current Status**: Image-to-video requires publicly accessible HTTPS URLs.
+
+- **Local uploads** (data URLs from file picker) are NOT supported because BytePlus API cannot access them
+- **Generated images** from Gemini (returned as base64) cannot be used directly with I2V
+- **Workaround**: Use publicly hosted image URLs in Reference nodes
+- **Phase 2 Fix**: Implement Supabase Storage integration for automatic image hosting
+
+**Supported I2V Workflows**:
+- ✅ Reference node with HTTPS URL → Video node
+- ✅ Text-to-video (no image reference needed)
+- ❌ Local file upload → Video (needs image hosting)
+- ❌ Generated Image → Video (needs image hosting)
 
 ---
 
