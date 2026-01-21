@@ -1,0 +1,36 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_ENV = "production"
+  NEXT_TELEMETRY_DISABLED = "1"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    X-XSS-Protection = "1; mode=block"
+    Referrer-Policy = "origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+    Strict-Transport-Security = "max-age=63072000; includeSubDomains; preload"
+
+[[redirects]]
+  from = "/"
+  to = "/login"
+  status = 302
+  force = false
+  conditions = {Cookie = ["!auth_token"]}
+
+[functions]
+  directory = ".netlify/functions"
+  node_bundler = "esbuild"
+
+# Rate limiting (if using Netlify Edge Functions)
+[[edge_functions]]
+  function = "rate-limiter"
+  path = "/api/*"

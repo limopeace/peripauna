@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: flora-fauna-ai
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - AUTH_PASSWORD=${AUTH_PASSWORD}
+      - AUTH_TOKEN=${AUTH_TOKEN}
+      - ARK_API_KEY=${ARK_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY}
+      - TEST_MODE=false
+      - ALLOWED_ORIGIN=${ALLOWED_ORIGIN}
+    env_file:
+      - .env.production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - flora-fauna-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: Redis for distributed rate limiting (Phase 2)
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: flora-fauna-redis
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis-data:/data
+  #   restart: unless-stopped
+  #   networks:
+  #     - flora-fauna-network
+
+networks:
+  flora-fauna-network:
+    driver: bridge
+
+# Uncomment for Redis
+# volumes:
+#   redis-data:
