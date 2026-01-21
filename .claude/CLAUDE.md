@@ -65,8 +65,19 @@ Set `TEST_MODE=true` in `.env.local` to use mock responses without API calls.
 - Error handling
 - Security headers
 
+## Codebase Documentation
+Comprehensive technical documentation in `.planning/codebase/`:
+- **STACK.md** - Tech stack, dependencies, versions
+- **ARCHITECTURE.md** - System design, data flow, layers
+- **STRUCTURE.md** - Directory layout, file locations
+- **CONVENTIONS.md** - Code style, patterns, best practices
+- **INTEGRATIONS.md** - External APIs, services, auth
+- **TESTING.md** - Test strategy, framework plans
+- **CONCERNS.md** - Technical debt (19 items tracked)
+
 ## Security Notes
 - Rate limits: 20 img/hr, 5 video/hr, 50 prompts/hr per IP
 - SSRF protection on image URLs
 - HTTP-only cookies for sessions
 - Security headers via `next.config.ts`
+- Full audit: `SECURITY_AUDIT.md` (Grade A)
