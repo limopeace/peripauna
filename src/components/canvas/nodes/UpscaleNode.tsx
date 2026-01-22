@@ -4,10 +4,10 @@ import React, { useCallback, memo, useState } from "react";
 import { NodeProps } from "@xyflow/react";
 import { ArrowUpFromLine, Play, Download, Settings2 } from "lucide-react";
 import { BaseNode, NodeHeader, ProgressBar, StatusBadge } from "./BaseNode";
-import { UpscaleNodeData, DEFAULT_UPSCALE_SETTINGS } from "@/types/nodes";
+import { UpscaleNodeData } from "@/types/nodes";
 import { useCanvasStore } from "@/lib/stores/canvasStore";
 import { useHistoryStore } from "@/lib/stores/historyStore";
-import { UPSCALE_MODELS, calculateUpscaleCost } from "@/lib/config/modelPricing";
+import { calculateUpscaleCost } from "@/lib/config/modelPricing";
 import { downloadGeneration } from "@/lib/services/downloadManager";
 import { cn } from "@/lib/utils";
 
@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 // Upscale Node Component
 // ============================================
 // Upscales images from connected image/reference nodes
-// Uses Replicate Real-ESRGAN with optional face enhancement
+// Uses Stability AI Conservative Upscale (up to 4K output)
 
 function UpscaleNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as UpscaleNodeData;
@@ -152,10 +152,11 @@ function UpscaleNodeComponent({ id, data, selected }: NodeProps) {
       // Direct download if no tracking record
       const link = document.createElement("a");
       link.href = nodeData.outputUrl;
-      link.download = `upscaled_${nodeData.settings.scale}x_${Date.now()}.png`;
+      const ext = nodeData.settings.outputFormat || "png";
+      link.download = `upscaled_${Date.now()}.${ext}`;
       link.click();
     }
-  }, [nodeData.outputUrl, nodeData.settings.scale, nodeHistory]);
+  }, [nodeData.outputUrl, nodeData.settings.outputFormat, nodeHistory]);
 
   const status = nodeData.isGenerating
     ? "generating"
@@ -184,7 +185,7 @@ function UpscaleNodeComponent({ id, data, selected }: NodeProps) {
       {/* Model info */}
       <div className="mb-3">
         <p className="text-xs text-muted-foreground">
-          Real-ESRGAN • ${cost.toFixed(4)}/image
+          Stability AI • ${cost.toFixed(2)}/image
         </p>
       </div>
 
@@ -197,7 +198,7 @@ function UpscaleNodeComponent({ id, data, selected }: NodeProps) {
             className="w-full h-40 object-cover rounded-md"
           />
           <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-black/50 rounded text-xs text-white">
-            {nodeData.settings.scale}x
+            Up to 4K
           </div>
           <button
             onClick={handleDownload}
@@ -232,37 +233,26 @@ function UpscaleNodeComponent({ id, data, selected }: NodeProps) {
       {/* Detailed Settings */}
       {showSettings && (
         <div className="space-y-3 p-2 bg-muted/30 rounded-md mb-3">
-          {/* Scale Factor */}
+          {/* Output Format */}
           <div>
             <label className="text-xs font-medium text-muted-foreground">
-              Scale Factor
+              Output Format
             </label>
             <select
-              value={nodeData.settings.scale}
-              onChange={(e) => handleSettingChange("scale", parseInt(e.target.value) as 2 | 4)}
+              value={nodeData.settings.outputFormat}
+              onChange={(e) => handleSettingChange("outputFormat", e.target.value as "png" | "webp" | "jpeg")}
               disabled={nodeData.isGenerating}
               className="w-full mt-1 px-2 py-1 text-xs bg-background border border-input rounded focus:outline-none"
             >
-              <option value={2}>2x (Double)</option>
-              <option value={4}>4x (Quadruple)</option>
+              <option value="png">PNG (Best quality)</option>
+              <option value="webp">WebP (Smaller size)</option>
+              <option value="jpeg">JPEG (Widely compatible)</option>
             </select>
           </div>
 
-          {/* Face Enhancement */}
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-medium text-muted-foreground">
-              Face Enhancement (GFPGAN)
-            </label>
-            <input
-              type="checkbox"
-              checked={nodeData.settings.faceEnhance}
-              onChange={(e) => handleSettingChange("faceEnhance", e.target.checked)}
-              disabled={nodeData.isGenerating}
-              className="h-4 w-4 rounded border-input"
-            />
-          </div>
           <p className="text-xs text-muted-foreground">
-            Enable for portraits to enhance facial details
+            Conservative upscale preserves original content with minimal changes.
+            Automatically scales up to 4K resolution.
           </p>
         </div>
       )}

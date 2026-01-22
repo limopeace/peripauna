@@ -164,18 +164,18 @@ export const VIDEO_MODEL_PRICING: ModelPricing = {
 };
 
 // ============================================
-// Upscale Models - Replicate Real-ESRGAN
+// Upscale Models - Stability AI
 // ============================================
 
 export const UPSCALE_MODEL_PRICING: ModelPricing = {
-  "real-esrgan": {
-    name: "Real-ESRGAN",
-    provider: "Replicate (nightmareai)",
-    pricingUrl: "https://replicate.com/nightmareai/real-esrgan",
-    costPerGeneration: 0.0024, // T4 GPU pricing (416 images per $1)
+  "stability-conservative": {
+    name: "Stability Conservative Upscale",
+    provider: "Stability AI",
+    pricingUrl: "https://platform.stability.ai/pricing",
+    costPerGeneration: 0.25, // ~25 credits at $0.01/credit
     currency: "USD",
     lastUpdated: new Date("2026-01-22"),
-    notes: "2x or 4x upscaling, optional face enhancement (GFPGAN). Cheapest upscaling option.",
+    notes: "Up to 4K output. Preserves original content with minimal changes. Official Stability AI API.",
   },
 };
 

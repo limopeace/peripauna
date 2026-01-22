@@ -9,18 +9,15 @@ import {
 } from "@/lib/services/rateLimiter";
 
 // ============================================
-// Upscaling API Route - Replicate Real-ESRGAN
+// Upscaling API Route - Stability AI
 // ============================================
-// POST: Initiates image upscaling via Replicate
-// Returns prediction ID for polling
+// POST: Initiates image upscaling via Stability AI Conservative Upscale
+// GET: Poll upscaling job status
+// Docs: https://platform.stability.ai/docs/api-reference
 
-const REPLICATE_API_KEY = process.env.REPLICATE_API_KEY;
-const REPLICATE_API_BASE = "https://api.replicate.com/v1";
+const STABILITY_API_KEY = process.env.STABILITY_API_KEY;
+const STABILITY_API_BASE = "https://api.stability.ai/v2beta/stable-image/upscale";
 const TEST_MODE = process.env.TEST_MODE === "true";
-
-// Real-ESRGAN model version (nightmareai/real-esrgan)
-const REAL_ESRGAN_VERSION =
-  "42fed1c4974146d4d2414e2be2c5277c7fcf05fcc3a73abf41610695738c1d7b";
 
 // In-memory storage for upscale jobs (replace with Redis in production)
 export const upscaleJobs = new Map<
@@ -32,8 +29,7 @@ export const upscaleJobs = new Map<
     createdAt: Date;
     input: {
       imageUrl: string;
-      scale: 2 | 4;
-      faceEnhance: boolean;
+      outputFormat: "png" | "webp" | "jpeg";
     };
   }
 >();
@@ -52,7 +48,7 @@ function validateImageUrl(url: string): { valid: boolean; error?: string } {
 
     // Only allow HTTPS for production APIs
     if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-      return { valid: false, error: "Only HTTPS URLs are supported" };
+      return { valid: false, error: "Only HTTP/HTTPS URLs are supported" };
     }
 
     // Block localhost and private IPs (SSRF protection)
@@ -74,36 +70,47 @@ function validateImageUrl(url: string): { valid: boolean; error?: string } {
 }
 
 /**
- * Submit upscaling job to Replicate
+ * Fetch image from URL and convert to blob
  */
-async function submitUpscaleJob(
-  imageUrl: string,
-  scale: 2 | 4,
-  faceEnhance: boolean
+async function fetchImageAsBlob(url: string): Promise<Blob> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch image: ${response.statusText}`);
+  }
+  return await response.blob();
+}
+
+/**
+ * Upload image to Stability AI and get upscaled result
+ * Uses Conservative Upscale (fast, minimal changes to source)
+ */
+async function upscaleWithStability(
+  imageBlob: Blob,
+  outputFormat: "png" | "webp" | "jpeg" = "png"
 ): Promise<string> {
-  const response = await fetch(`${REPLICATE_API_BASE}/predictions`, {
+  const formData = new FormData();
+  formData.append("image", imageBlob, `image.${outputFormat}`);
+  formData.append("output_format", outputFormat);
+  // Conservative upscale: no prompt needed, preserves original content
+
+  const response = await fetch(`${STABILITY_API_BASE}/conservative`, {
     method: "POST",
     headers: {
-      Authorization: `Token ${REPLICATE_API_KEY}`,
-      "Content-Type": "application/json",
+      Authorization: `Bearer ${STABILITY_API_KEY}`,
+      Accept: `image/${outputFormat}`,
     },
-    body: JSON.stringify({
-      version: REAL_ESRGAN_VERSION,
-      input: {
-        image: imageUrl,
-        scale,
-        face_enhance: faceEnhance,
-      },
-    }),
+    body: formData,
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Replicate API error: ${error}`);
+    const errorText = await response.text();
+    throw new Error(`Stability AI error (${response.status}): ${errorText}`);
   }
 
-  const prediction = await response.json();
-  return prediction.id;
+  // Response is the image binary - convert to base64 data URL
+  const imageBuffer = await response.arrayBuffer();
+  const base64 = Buffer.from(imageBuffer).toString("base64");
+  return `data:image/${outputFormat};base64,${base64}`;
 }
 
 /**
@@ -123,44 +130,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
 
-    // If still processing, poll Replicate API
-    if (job.status === "processing" && REPLICATE_API_KEY && !TEST_MODE) {
-      try {
-        const response = await fetch(
-          `${REPLICATE_API_BASE}/predictions/${jobId}`,
-          {
-            headers: {
-              Authorization: `Token ${REPLICATE_API_KEY}`,
-            },
-          }
-        );
+    // Security headers
+    const headers = new Headers();
+    headers.set("X-Content-Type-Options", "nosniff");
 
-        if (response.ok) {
-          const prediction = await response.json();
-
-          if (prediction.status === "succeeded") {
-            job.status = "succeeded";
-            job.output = prediction.output;
-            upscaleJobs.set(jobId, job);
-          } else if (prediction.status === "failed") {
-            job.status = "failed";
-            job.error = prediction.error || "Upscaling failed";
-            upscaleJobs.set(jobId, job);
-          }
-        }
-      } catch (error) {
-        console.error("Error polling Replicate:", error);
-        // Don't fail the request, just return current status
-      }
-    }
-
-    return NextResponse.json({
-      id: jobId,
-      status: job.status,
-      output: job.output,
-      error: job.error,
-      input: job.input,
-    });
+    return NextResponse.json(
+      {
+        id: jobId,
+        status: job.status,
+        output: job.output,
+        error: job.error,
+        input: job.input,
+      },
+      { headers }
+    );
   } catch (error) {
     console.error("Upscale poll error:", error);
     return NextResponse.json(
@@ -222,31 +205,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const scale = settings.scale || 2;
-    const faceEnhance = settings.faceEnhance || false;
+    const outputFormat = settings.outputFormat || "png";
 
     // Generate job ID
     const jobId = uuidv4();
 
-    // Test mode: Return mock upscaled image
-    if (TEST_MODE || !REPLICATE_API_KEY) {
-      const job = {
-        status: "processing" as const,
-        createdAt: new Date(),
-        input: { imageUrl, scale, faceEnhance },
-      };
-      upscaleJobs.set(jobId, job);
+    // Create initial job record
+    const job = {
+      status: "processing" as const,
+      createdAt: new Date(),
+      input: { imageUrl, outputFormat },
+    };
+    upscaleJobs.set(jobId, job);
 
-      // Simulate upscaling completion after 3 seconds
+    // Test mode: Return mock upscaled image
+    if (TEST_MODE || !STABILITY_API_KEY) {
+      // Simulate upscaling completion after 2 seconds
       setTimeout(() => {
         const existingJob = upscaleJobs.get(jobId);
         if (existingJob) {
           existingJob.status = "succeeded";
           // In test mode, return original URL with query param to simulate upscaling
-          existingJob.output = `${imageUrl}${imageUrl.includes("?") ? "&" : "?"}upscaled=${scale}x`;
+          existingJob.output = `${imageUrl}${imageUrl.includes("?") ? "&" : "?"}upscaled=stability`;
           upscaleJobs.set(jobId, existingJob);
         }
-      }, 3000);
+      }, 2000);
 
       return NextResponse.json({
         id: jobId,
@@ -255,32 +238,39 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Production mode: Submit to Replicate
-    try {
-      const replicateId = await submitUpscaleJob(imageUrl, scale, faceEnhance);
+    // Production mode: Process with Stability AI
+    // Run async to return immediately (conservative upscale is fast but still takes a few seconds)
+    (async () => {
+      try {
+        // Fetch the source image
+        const imageBlob = await fetchImageAsBlob(imageUrl);
 
-      const job = {
-        status: "processing" as const,
-        createdAt: new Date(),
-        input: { imageUrl, scale, faceEnhance },
-      };
-      upscaleJobs.set(replicateId, job);
+        // Upscale with Stability AI
+        const upscaledDataUrl = await upscaleWithStability(imageBlob, outputFormat);
 
-      return NextResponse.json({
-        id: replicateId,
-        status: "processing",
-        message: "Upscaling started",
-      });
-    } catch (error) {
-      console.error("Failed to submit upscale job:", error);
-      return NextResponse.json(
-        {
-          error: "Failed to start upscaling",
-          details: error instanceof Error ? error.message : "Unknown error",
-        },
-        { status: 500 }
-      );
-    }
+        // Update job with result
+        const existingJob = upscaleJobs.get(jobId);
+        if (existingJob) {
+          existingJob.status = "succeeded";
+          existingJob.output = upscaledDataUrl;
+          upscaleJobs.set(jobId, existingJob);
+        }
+      } catch (error) {
+        console.error("Stability AI upscale error:", error);
+        const existingJob = upscaleJobs.get(jobId);
+        if (existingJob) {
+          existingJob.status = "failed";
+          existingJob.error = error instanceof Error ? error.message : "Upscaling failed";
+          upscaleJobs.set(jobId, existingJob);
+        }
+      }
+    })();
+
+    return NextResponse.json({
+      id: jobId,
+      status: "processing",
+      message: "Upscaling started",
+    });
   } catch (error) {
     console.error("Upscale API error:", error);
     return NextResponse.json(

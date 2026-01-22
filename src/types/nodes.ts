@@ -26,9 +26,8 @@ export interface VideoSettings {
 }
 
 export interface UpscaleSettings {
-  model: "real-esrgan"; // Future: could add more models
-  scale: 2 | 4; // 2x or 4x upscaling
-  faceEnhance: boolean; // Enable GFPGAN for face enhancement
+  model: "stability-conservative"; // Stability AI Conservative Upscale
+  outputFormat: "png" | "webp" | "jpeg";
 }
 
 // ============================================
@@ -138,7 +137,6 @@ export const DEFAULT_VIDEO_SETTINGS: VideoSettings = {
 };
 
 export const DEFAULT_UPSCALE_SETTINGS: UpscaleSettings = {
-  model: "real-esrgan",
-  scale: 2,
-  faceEnhance: false,
+  model: "stability-conservative",
+  outputFormat: "png",
 };
