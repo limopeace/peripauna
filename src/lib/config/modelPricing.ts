@@ -164,12 +164,29 @@ export const VIDEO_MODEL_PRICING: ModelPricing = {
 };
 
 // ============================================
+// Upscale Models - Replicate Real-ESRGAN
+// ============================================
+
+export const UPSCALE_MODEL_PRICING: ModelPricing = {
+  "real-esrgan": {
+    name: "Real-ESRGAN",
+    provider: "Replicate (nightmareai)",
+    pricingUrl: "https://replicate.com/nightmareai/real-esrgan",
+    costPerGeneration: 0.0024, // T4 GPU pricing (416 images per $1)
+    currency: "USD",
+    lastUpdated: new Date("2026-01-22"),
+    notes: "2x or 4x upscaling, optional face enhancement (GFPGAN). Cheapest upscaling option.",
+  },
+};
+
+// ============================================
 // Combined Pricing Lookup
 // ============================================
 
 export const MODEL_PRICING: ModelPricing = {
   ...IMAGE_MODEL_PRICING,
   ...VIDEO_MODEL_PRICING,
+  ...UPSCALE_MODEL_PRICING,
 };
 
 // ============================================
@@ -193,6 +210,12 @@ export function calculateVideoCost(
   const pricing = VIDEO_MODEL_PRICING[modelId];
   if (!pricing) return 0;
   return (pricing.costPerSecond || 0) * durationSeconds;
+}
+
+export function calculateUpscaleCost(modelId: string): number {
+  const pricing = UPSCALE_MODEL_PRICING[modelId];
+  if (!pricing) return 0;
+  return pricing.costPerGeneration || 0;
 }
 
 export function addModelPricing(
@@ -231,6 +254,16 @@ export const VIDEO_MODELS = Object.entries(VIDEO_MODEL_PRICING).map(
     name: config.name,
     provider: config.provider,
     costPerSecond: config.costPerSecond || 0,
+    notes: config.notes,
+  })
+);
+
+export const UPSCALE_MODELS = Object.entries(UPSCALE_MODEL_PRICING).map(
+  ([id, config]) => ({
+    id,
+    name: config.name,
+    provider: config.provider,
+    cost: config.costPerGeneration || 0,
     notes: config.notes,
   })
 );

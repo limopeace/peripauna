@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { imagePredictions } from "../generate/image/route";
+import { upscaleJobs } from "../generate/upscale/route";
 
 // ============================================
 // Poll API Route
 // ============================================
-// GET: Check status of image or video generation
+// GET: Check status of image, video, or upscale generation
 // - Images: Uses in-memory predictions (for mock/demo)
 // - Videos: Proxies to BytePlus status endpoint
+// - Upscales: Uses Replicate polling via upscale endpoint
 
 /**
  * Validate task ID format
@@ -52,6 +54,45 @@ export async function GET(request: NextRequest) {
         status: prediction.status,
         output: prediction.output,
         error: prediction.error,
+      },
+      { headers }
+    );
+  }
+
+  // Check for upscale job
+  const upscaleId = searchParams.get("upscaleId");
+  if (upscaleId) {
+    const job = upscaleJobs.get(upscaleId);
+
+    if (!job) {
+      return NextResponse.json(
+        { error: "Upscale job not found" },
+        { status: 404 }
+      );
+    }
+
+    // Clean up old jobs (older than 1 hour)
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    if (job.createdAt < oneHourAgo) {
+      upscaleJobs.delete(upscaleId);
+      return NextResponse.json(
+        { error: "Upscale job expired" },
+        { status: 410 }
+      );
+    }
+
+    // Security headers
+    const headers = new Headers();
+    headers.set("X-Content-Type-Options", "nosniff");
+    headers.set("X-Frame-Options", "DENY");
+
+    return NextResponse.json(
+      {
+        id: upscaleId,
+        status: job.status,
+        output: job.output,
+        error: job.error,
+        input: job.input,
       },
       { headers }
     );
@@ -125,7 +166,7 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json(
-    { error: "Missing predictionId or taskId parameter" },
+    { error: "Missing predictionId, upscaleId, or taskId parameter" },
     { status: 400 }
   );
 }

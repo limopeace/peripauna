@@ -25,6 +25,12 @@ export interface VideoSettings {
   seed?: number;
 }
 
+export interface UpscaleSettings {
+  model: "real-esrgan"; // Future: could add more models
+  scale: 2 | 4; // 2x or 4x upscaling
+  faceEnhance: boolean; // Enable GFPGAN for face enhancement
+}
+
 // ============================================
 // Node Data Types
 // ============================================
@@ -73,6 +79,17 @@ export interface VideoNodeData {
   [key: string]: unknown;
 }
 
+export interface UpscaleNodeData {
+  label: string;
+  settings: UpscaleSettings;
+  isGenerating: boolean;
+  outputUrl: string | null;
+  localCopyUrl?: string;
+  upscaleId?: string;
+  error?: string;
+  [key: string]: unknown;
+}
+
 // ============================================
 // Custom Node Types
 // ============================================
@@ -81,8 +98,9 @@ export type PromptNode = Node<PromptNodeData, "prompt">;
 export type ReferenceNode = Node<ReferenceNodeData, "reference">;
 export type ImageNode = Node<ImageNodeData, "image">;
 export type VideoNode = Node<VideoNodeData, "video">;
+export type UpscaleNode = Node<UpscaleNodeData, "upscale">;
 
-export type AppNode = PromptNode | ReferenceNode | ImageNode | VideoNode;
+export type AppNode = PromptNode | ReferenceNode | ImageNode | VideoNode | UpscaleNode;
 export type AppEdge = Edge;
 
 // ============================================
@@ -117,4 +135,10 @@ export const DEFAULT_VIDEO_SETTINGS: VideoSettings = {
   resolution: "720p",
   fps: 24,
   cameraMovement: "static",
+};
+
+export const DEFAULT_UPSCALE_SETTINGS: UpscaleSettings = {
+  model: "real-esrgan",
+  scale: 2,
+  faceEnhance: false,
 };

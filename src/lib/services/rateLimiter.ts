@@ -160,6 +160,10 @@ export const RATE_LIMITS = {
     maxRequests: 5, // 5 videos per hour (expensive)
     windowMs: 60 * 60 * 1000, // 1 hour
   },
+  IMAGE_UPSCALE: {
+    maxRequests: 50, // 50 upscales per hour (cheap operation)
+    windowMs: 60 * 60 * 1000, // 1 hour
+  },
   PROMPT_ENHANCEMENT: {
     maxRequests: 50, // 50 prompt enhancements per hour
     windowMs: 60 * 60 * 1000, // 1 hour
