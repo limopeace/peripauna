@@ -220,27 +220,23 @@ async function generateImageAsync(
 
     let response: Response;
     try {
+      // Build minimal request body - only required parameters
+      const requestBody = {
+        instances: [{ prompt: geminiPrompt }],
+        parameters: {
+          sampleCount: 1,
+          aspectRatio: aspectRatioMap[settings.aspectRatio] || "1:1",
+        },
+      };
+
       response = await fetch(
-        `${GEMINI_API_BASE}/models/imagen-3.0-generate-001:predict?key=${GEMINI_API_KEY}`,
+        `${GEMINI_API_BASE}/models/imagen-4.0-generate-001:predict?key=${GEMINI_API_KEY}`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            instances: [
-              {
-                prompt: geminiPrompt,
-              },
-            ],
-            parameters: {
-              sampleCount: 1,
-              aspectRatio: aspectRatioMap[settings.aspectRatio] || "1:1",
-              negativePrompt: negativePrompt || "",
-              safetyFilterLevel: "block_some",
-              personGeneration: "allow_all",
-            },
-          }),
+          body: JSON.stringify(requestBody),
           signal: controller.signal,
         }
       );
@@ -257,9 +253,10 @@ async function generateImageAsync(
     }
 
     if (!response.ok) {
-      console.error("Gemini API error:", response.status);
+      const errorText = await response.text();
+      console.error("Gemini API error:", response.status, errorText);
       prediction.status = "failed";
-      prediction.error = "Image generation failed";
+      prediction.error = `Image generation failed (${response.status})`;
       return;
     }
 

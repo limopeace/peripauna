@@ -164,12 +164,29 @@ export const VIDEO_MODEL_PRICING: ModelPricing = {
 };
 
 // ============================================
+// Upscale Models - Stability AI
+// ============================================
+
+export const UPSCALE_MODEL_PRICING: ModelPricing = {
+  "stability-conservative": {
+    name: "Stability Conservative Upscale",
+    provider: "Stability AI",
+    pricingUrl: "https://platform.stability.ai/pricing",
+    costPerGeneration: 0.25, // ~25 credits at $0.01/credit
+    currency: "USD",
+    lastUpdated: new Date("2026-01-22"),
+    notes: "Up to 4K output. Preserves original content with minimal changes. Official Stability AI API.",
+  },
+};
+
+// ============================================
 // Combined Pricing Lookup
 // ============================================
 
 export const MODEL_PRICING: ModelPricing = {
   ...IMAGE_MODEL_PRICING,
   ...VIDEO_MODEL_PRICING,
+  ...UPSCALE_MODEL_PRICING,
 };
 
 // ============================================
@@ -193,6 +210,12 @@ export function calculateVideoCost(
   const pricing = VIDEO_MODEL_PRICING[modelId];
   if (!pricing) return 0;
   return (pricing.costPerSecond || 0) * durationSeconds;
+}
+
+export function calculateUpscaleCost(modelId: string): number {
+  const pricing = UPSCALE_MODEL_PRICING[modelId];
+  if (!pricing) return 0;
+  return pricing.costPerGeneration || 0;
 }
 
 export function addModelPricing(
@@ -231,6 +254,16 @@ export const VIDEO_MODELS = Object.entries(VIDEO_MODEL_PRICING).map(
     name: config.name,
     provider: config.provider,
     costPerSecond: config.costPerSecond || 0,
+    notes: config.notes,
+  })
+);
+
+export const UPSCALE_MODELS = Object.entries(UPSCALE_MODEL_PRICING).map(
+  ([id, config]) => ({
+    id,
+    name: config.name,
+    provider: config.provider,
+    cost: config.costPerGeneration || 0,
     notes: config.notes,
   })
 );

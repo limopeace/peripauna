@@ -19,9 +19,11 @@ import {
   ReferenceNodeData,
   ImageNodeData,
   VideoNodeData,
+  UpscaleNodeData,
   ConnectedInputs,
   DEFAULT_IMAGE_SETTINGS,
   DEFAULT_VIDEO_SETTINGS,
+  DEFAULT_UPSCALE_SETTINGS,
 } from "@/types/nodes";
 import { WorkflowExecution } from "@/types/history";
 
@@ -52,7 +54,7 @@ interface CanvasState {
 
   // Actions - Node Management
   addNode: (
-    type: "prompt" | "reference" | "image" | "video",
+    type: "prompt" | "reference" | "image" | "video" | "upscale",
     position: { x: number; y: number }
   ) => string;
   updateNodeData: <T>(nodeId: string, data: Partial<T>) => void;
@@ -118,6 +120,15 @@ function createVideoNodeData(): VideoNodeData {
   };
 }
 
+function createUpscaleNodeData(): UpscaleNodeData {
+  return {
+    label: "Upscale Image",
+    settings: { ...DEFAULT_UPSCALE_SETTINGS },
+    isGenerating: false,
+    outputUrl: null,
+  };
+}
+
 // ============================================
 // Canvas Store Implementation
 // ============================================
@@ -162,7 +173,7 @@ export const useCanvasStore = create<CanvasState>()(
       // Node Management
       addNode: (type, position) => {
         const id = uuidv4();
-        let data: PromptNodeData | ReferenceNodeData | ImageNodeData | VideoNodeData;
+        let data: PromptNodeData | ReferenceNodeData | ImageNodeData | VideoNodeData | UpscaleNodeData;
 
         switch (type) {
           case "prompt":
@@ -176,6 +187,9 @@ export const useCanvasStore = create<CanvasState>()(
             break;
           case "video":
             data = createVideoNodeData();
+            break;
+          case "upscale":
+            data = createUpscaleNodeData();
             break;
         }
 

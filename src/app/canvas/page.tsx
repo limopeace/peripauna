@@ -30,6 +30,7 @@ import {
   Upload,
   Trash2,
   Workflow,
+  ArrowUpFromLine,
 } from "lucide-react";
 
 import { useCanvasStore } from "@/lib/stores/canvasStore";
@@ -71,7 +72,7 @@ function CanvasContent() {
 
   // Add node at center or mouse position
   const handleAddNode = useCallback(
-    (type: "prompt" | "reference" | "image" | "video") => {
+    (type: "prompt" | "reference" | "image" | "video" | "upscale") => {
       const center = screenToFlowPosition({
         x: window.innerWidth / 2,
         y: window.innerHeight / 2,
@@ -223,6 +224,14 @@ function CanvasContent() {
               >
                 <Plus size={14} />
                 Video
+              </button>
+              <button
+                onClick={() => handleAddNode("upscale")}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-cyan-500/10 text-cyan-600 hover:bg-cyan-500/20 rounded-md transition-colors"
+                title="Add Upscale Node"
+              >
+                <ArrowUpFromLine size={14} />
+                Upscale
               </button>
             </div>
           </div>
