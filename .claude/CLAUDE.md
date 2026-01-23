@@ -65,6 +65,37 @@ Set `TEST_MODE=true` in `.env.local` to use mock responses without API calls.
 - Error handling
 - Security headers
 
+## Phase 2 Status
+🔄 In Progress - Verification and Enhanced Features
+
+### OutputNode (NEW)
+- **File**: `src/components/canvas/nodes/OutputNode.tsx`
+- Auto-detects content type (image/video)
+- Preview display with placeholder when disconnected
+- Download button (generates file from connected content)
+- Fullscreen view (opens in new tab)
+- Emerald color theme in toolbar and MiniMap
+
+### ReferenceNode Character Mode (NEW)
+- **File**: `src/components/canvas/nodes/ReferenceNode.tsx`
+- Three reference types: `style`, `character`, `composition`
+- Character mode features:
+  - Multi-image upload grid (up to 6 images)
+  - Character name field (updates node header dynamically)
+  - Character description field
+  - 0/6 counter display
+- Purple border when in character mode
+
+## Node Types
+| Node | Color | Purpose |
+|------|-------|---------|
+| PromptNode | Gray | Text input with AI enhancement |
+| ReferenceNode | Purple | Style/character/composition references |
+| ImageNode | Pink | Gemini image generation |
+| VideoNode | Yellow | BytePlus video generation |
+| UpscaleNode | Cyan | Stability AI upscaling |
+| OutputNode | Emerald | Final output with download/preview |
+
 ## Codebase Documentation
 Comprehensive technical documentation in `.planning/codebase/`:
 - **STACK.md** - Tech stack, dependencies, versions
@@ -74,6 +105,13 @@ Comprehensive technical documentation in `.planning/codebase/`:
 - **INTEGRATIONS.md** - External APIs, services, auth
 - **TESTING.md** - Test strategy, framework plans
 - **CONCERNS.md** - Technical debt (19 items tracked)
+
+## GSD Framework
+Project tracking in `.planning/`:
+- **PROJECT.md** - Project definition and success criteria
+- **ROADMAP.md** - Milestones and phase breakdown
+- **STATE.md** - Current status and context
+- **config.json** - GSD configuration
 
 ## Security Notes
 - Rate limits: 20 img/hr, 5 video/hr, 50 prompts/hr per IP
