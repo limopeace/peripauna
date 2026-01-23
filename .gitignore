@@ -53,3 +53,4 @@ next-env.d.ts
 
 # planning
 .planning/intel/          # Auto-generated codebase intelligence (can be regenerated)
+firebase-debug.log
