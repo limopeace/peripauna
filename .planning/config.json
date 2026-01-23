@@ -1,0 +1,33 @@
+{
+  "version": "1.0.0",
+  "project": {
+    "name": "Peripauna",
+    "alias": "Flora Fauna AI",
+    "type": "brownfield"
+  },
+  "gsd": {
+    "profile": "balanced",
+    "autoCommit": true,
+    "verifyBeforeComplete": true
+  },
+  "milestones": {
+    "current": 2,
+    "total": 3
+  },
+  "phases": {
+    "current": "2.1",
+    "description": "Verification and Cleanup"
+  },
+  "verification": {
+    "typescript": true,
+    "eslint": true,
+    "build": true,
+    "tests": false
+  },
+  "paths": {
+    "planning": ".planning",
+    "codebase": ".planning/codebase",
+    "screenshots": ".playwright-mcp"
+  },
+  "lastUpdated": "2025-01-23T18:45:00Z"
+}
