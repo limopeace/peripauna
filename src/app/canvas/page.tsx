@@ -73,7 +73,7 @@ function CanvasContent() {
 
   // Add node at center or mouse position
   const handleAddNode = useCallback(
-    (type: "prompt" | "reference" | "image" | "video" | "upscale") => {
+    (type: "prompt" | "reference" | "image" | "video" | "upscale" | "output") => {
       const center = screenToFlowPosition({
         x: window.innerWidth / 2,
         y: window.innerHeight / 2,
@@ -234,6 +234,14 @@ function CanvasContent() {
                 <ArrowUpFromLine size={14} />
                 Upscale
               </button>
+              <button
+                onClick={() => handleAddNode("output")}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 rounded-md transition-colors"
+                title="Add Output Node"
+              >
+                <Download size={14} />
+                Output
+              </button>
             </div>
           </div>
 
@@ -370,13 +378,17 @@ function CanvasContent() {
               nodeColor={(node) => {
                 switch (node.type) {
                   case "prompt":
-                    return "#3b82f6";
+                    return "#3b82f6"; // blue-500
                   case "reference":
-                    return "#10b981";
+                    return "#06b6d4"; // cyan-500
                   case "image":
-                    return "#ec4899";
+                    return "#ec4899"; // pink-500
                   case "video":
-                    return "#8b5cf6";
+                    return "#8b5cf6"; // violet-500
+                  case "upscale":
+                    return "#0891b2"; // cyan-600
+                  case "output":
+                    return "#10b981"; // emerald-500
                   default:
                     return "#6b7280";
                 }

@@ -47,7 +47,10 @@ export interface PromptNodeData {
 
 export interface ReferenceNodeData {
   label: string;
-  imageUrl: string | null;
+  imageUrl: string | null;           // Single image mode
+  imageUrls?: string[];              // Character mode multi-images (up to 6)
+  characterName?: string;            // Character mode name
+  description?: string;              // Character mode description
   thumbnailUrl?: string;
   referenceType: "style" | "character" | "composition";
   strength: number; // 0-1
@@ -92,17 +95,11 @@ export interface UpscaleNodeData {
   [key: string]: unknown;
 }
 
-export interface ImageUploadNodeData {
+export interface OutputNodeData {
   label: string;
-  imageUrl: string | null;       // Can be data URL (local) or HTTPS URL
-  thumbnailUrl?: string;
-  fileName?: string;
-  fileSize?: number;             // In bytes
-  dimensions?: {
-    width: number;
-    height: number;
-  };
-  uploadedAt?: string;           // ISO date string
+  outputUrl: string | null;
+  outputType: "image" | "video";
+  filename?: string;
   [key: string]: unknown;
 }
 
@@ -115,9 +112,9 @@ export type ReferenceNode = Node<ReferenceNodeData, "reference">;
 export type ImageNode = Node<ImageNodeData, "image">;
 export type VideoNode = Node<VideoNodeData, "video">;
 export type UpscaleNode = Node<UpscaleNodeData, "upscale">;
-export type ImageUploadNode = Node<ImageUploadNodeData, "imageUpload">;
+export type OutputNode = Node<OutputNodeData, "output">;
 
-export type AppNode = PromptNode | ReferenceNode | ImageNode | VideoNode | UpscaleNode | ImageUploadNode;
+export type AppNode = PromptNode | ReferenceNode | ImageNode | VideoNode | UpscaleNode | OutputNode;
 export type AppEdge = Edge;
 
 // ============================================

@@ -2,7 +2,7 @@
 
 import React, { useCallback, memo, useRef } from "react";
 import { NodeProps } from "@xyflow/react";
-import { Image as ImageIcon, Upload, X } from "lucide-react";
+import { Image as ImageIcon, Upload, X, Plus, User } from "lucide-react";
 import { BaseNode, NodeHeader } from "./BaseNode";
 import { ReferenceNodeData } from "@/types/nodes";
 import { useCanvasStore } from "@/lib/stores/canvasStore";
@@ -12,13 +12,18 @@ import { cn } from "@/lib/utils";
 // Reference Node Component
 // ============================================
 // Provides reference images for style/character/composition
+// Character mode supports multi-image references (up to 6)
 // Supports before/after pairing for video workflows
+
+const MAX_CHARACTER_IMAGES = 6;
 
 function ReferenceNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as ReferenceNodeData;
   const { updateNodeData, deleteNode } = useCanvasStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const multiFileInputRef = useRef<HTMLInputElement>(null);
 
+  // Single image upload (style/composition modes)
   const handleImageUpload = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -34,6 +39,46 @@ function ReferenceNodeComponent({ id, data, selected }: NodeProps) {
       reader.readAsDataURL(file);
     },
     [id, updateNodeData]
+  );
+
+  // Multi-image upload (character mode)
+  const handleMultiImageUpload = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+
+      const currentImages = nodeData.imageUrls || [];
+      const remainingSlots = MAX_CHARACTER_IMAGES - currentImages.length;
+      const filesToProcess = Array.from(files).slice(0, remainingSlots);
+
+      filesToProcess.forEach((file) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const newUrl = event.target?.result as string;
+          updateNodeData<ReferenceNodeData>(id, {
+            imageUrls: [...(nodeData.imageUrls || []), newUrl],
+          });
+        };
+        reader.readAsDataURL(file);
+      });
+
+      // Reset input
+      if (multiFileInputRef.current) {
+        multiFileInputRef.current.value = "";
+      }
+    },
+    [id, nodeData.imageUrls, updateNodeData]
+  );
+
+  // Delete individual character image
+  const handleDeleteCharacterImage = useCallback(
+    (indexToDelete: number) => {
+      const currentImages = nodeData.imageUrls || [];
+      updateNodeData<ReferenceNodeData>(id, {
+        imageUrls: currentImages.filter((_, idx) => idx !== indexToDelete),
+      });
+    },
+    [id, nodeData.imageUrls, updateNodeData]
   );
 
   const handleImagePaste = useCallback(
@@ -83,6 +128,25 @@ function ReferenceNodeComponent({ id, data, selected }: NodeProps) {
     [id, updateNodeData]
   );
 
+  // Character mode handlers
+  const handleCharacterNameChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      updateNodeData<ReferenceNodeData>(id, { characterName: e.target.value });
+    },
+    [id, updateNodeData]
+  );
+
+  const handleDescriptionChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      updateNodeData<ReferenceNodeData>(id, { description: e.target.value });
+    },
+    [id, updateNodeData]
+  );
+
+  const isCharacterMode = nodeData.referenceType === "character";
+  const characterImages = nodeData.imageUrls || [];
+  const canAddMoreImages = characterImages.length < MAX_CHARACTER_IMAGES;
+
   return (
     <BaseNode
       selected={selected}
@@ -90,8 +154,8 @@ function ReferenceNodeComponent({ id, data, selected }: NodeProps) {
       className="bg-gradient-to-b from-cyan-500/5 to-transparent"
     >
       <NodeHeader
-        icon={<ImageIcon size={16} />}
-        label={nodeData.label}
+        icon={isCharacterMode ? <User size={16} /> : <ImageIcon size={16} />}
+        label={isCharacterMode && nodeData.characterName ? nodeData.characterName : nodeData.label}
         onDelete={handleDelete}
         badge={
           nodeData.role !== "single" && (
@@ -109,49 +173,121 @@ function ReferenceNodeComponent({ id, data, selected }: NodeProps) {
         }
       />
 
-      {/* Image Upload Area */}
-      <div className="relative">
-        {nodeData.imageUrl ? (
-          <div className="relative group">
-            <img
-              src={nodeData.imageUrl}
-              alt="Reference"
-              className="w-full h-32 object-cover rounded-md"
-            />
-            <button
-              onClick={handleClearImage}
-              className="absolute top-1 right-1 p-1 bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-            >
-              <X size={14} className="text-white" />
-            </button>
-          </div>
-        ) : (
-          <label className="flex flex-col items-center justify-center h-32 border-2 border-dashed border-muted-foreground/25 rounded-md cursor-pointer hover:border-muted-foreground/50 transition-colors">
-            <Upload size={24} className="text-muted-foreground mb-2" />
-            <span className="text-xs text-muted-foreground">
-              Click or drop image
-            </span>
+      {/* Conditional: Character Mode or Single Image Mode */}
+      {isCharacterMode ? (
+        <>
+          {/* Character Name Input */}
+          <div className="mb-2">
+            <label className="text-xs font-medium text-muted-foreground block mb-1">
+              Character Name
+            </label>
             <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleImageUpload}
-              className="hidden"
+              type="text"
+              value={nodeData.characterName || ""}
+              onChange={handleCharacterNameChange}
+              placeholder="Enter character name..."
+              className="w-full px-2 py-1.5 text-sm bg-background border border-input rounded focus:outline-none focus:ring-1 focus:ring-ring"
             />
-          </label>
-        )}
-      </div>
+          </div>
 
-      {/* URL Paste Input */}
-      <input
-        type="text"
-        placeholder="Or paste image URL..."
-        onPaste={(e) => {
-          const url = e.clipboardData.getData("text");
-          handleImagePaste(url);
-        }}
-        className="w-full mt-2 px-2 py-1 text-xs bg-background border border-input rounded focus:outline-none focus:ring-1 focus:ring-ring"
-      />
+          {/* Character Description */}
+          <div className="mb-2">
+            <label className="text-xs font-medium text-muted-foreground block mb-1">
+              Description
+            </label>
+            <textarea
+              value={nodeData.description || ""}
+              onChange={handleDescriptionChange}
+              placeholder="Describe the character..."
+              rows={2}
+              className="w-full px-2 py-1.5 text-xs bg-background border border-input rounded resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+          </div>
+
+          {/* Multi-Image Grid (up to 6 images) */}
+          <div className="mb-2">
+            <label className="text-xs font-medium text-muted-foreground block mb-1">
+              Reference Images ({characterImages.length}/{MAX_CHARACTER_IMAGES})
+            </label>
+            <div className="grid grid-cols-3 gap-1.5">
+              {characterImages.map((url, idx) => (
+                <div key={idx} className="relative group aspect-square">
+                  <img
+                    src={url}
+                    alt={`Character ref ${idx + 1}`}
+                    className="w-full h-full object-cover rounded-md"
+                  />
+                  <button
+                    onClick={() => handleDeleteCharacterImage(idx)}
+                    className="absolute top-0.5 right-0.5 p-0.5 bg-black/60 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X size={10} className="text-white" />
+                  </button>
+                </div>
+              ))}
+              {canAddMoreImages && (
+                <label className="aspect-square flex flex-col items-center justify-center border-2 border-dashed border-muted-foreground/25 rounded-md cursor-pointer hover:border-muted-foreground/50 transition-colors">
+                  <Plus size={16} className="text-muted-foreground" />
+                  <input
+                    ref={multiFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleMultiImageUpload}
+                    className="hidden"
+                  />
+                </label>
+              )}
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Single Image Upload Area */}
+          <div className="relative">
+            {nodeData.imageUrl ? (
+              <div className="relative group">
+                <img
+                  src={nodeData.imageUrl}
+                  alt="Reference"
+                  className="w-full h-32 object-cover rounded-md"
+                />
+                <button
+                  onClick={handleClearImage}
+                  className="absolute top-1 right-1 p-1 bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X size={14} className="text-white" />
+                </button>
+              </div>
+            ) : (
+              <label className="flex flex-col items-center justify-center h-32 border-2 border-dashed border-muted-foreground/25 rounded-md cursor-pointer hover:border-muted-foreground/50 transition-colors">
+                <Upload size={24} className="text-muted-foreground mb-2" />
+                <span className="text-xs text-muted-foreground">
+                  Click or drop image
+                </span>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                />
+              </label>
+            )}
+          </div>
+
+          {/* URL Paste Input */}
+          <input
+            type="text"
+            placeholder="Or paste image URL..."
+            onPaste={(e) => {
+              const url = e.clipboardData.getData("text");
+              handleImagePaste(url);
+            }}
+            className="w-full mt-2 px-2 py-1 text-xs bg-background border border-input rounded focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+        </>
+      )}
 
       {/* Reference Type */}
       <div className="mt-3">

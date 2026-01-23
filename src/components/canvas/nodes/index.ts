@@ -3,7 +3,7 @@ export { ReferenceNode } from "./ReferenceNode";
 export { ImageNode } from "./ImageNode";
 export { VideoNode } from "./VideoNode";
 export { UpscaleNode } from "./UpscaleNode";
-export { ImageUploadNode } from "./ImageUploadNode";
+export { OutputNode } from "./OutputNode";
 export { BaseNode, NodeHeader, ProgressBar, StatusBadge } from "./BaseNode";
 
 // Node types map for React Flow
@@ -12,7 +12,7 @@ import { ReferenceNode } from "./ReferenceNode";
 import { ImageNode } from "./ImageNode";
 import { VideoNode } from "./VideoNode";
 import { UpscaleNode } from "./UpscaleNode";
-import { ImageUploadNode } from "./ImageUploadNode";
+import { OutputNode } from "./OutputNode";
 
 export const nodeTypes = {
   prompt: PromptNode,
@@ -20,5 +20,5 @@ export const nodeTypes = {
   image: ImageNode,
   video: VideoNode,
   upscale: UpscaleNode,
-  imageUpload: ImageUploadNode,
+  output: OutputNode,
 };

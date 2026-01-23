@@ -20,7 +20,7 @@ import {
   ImageNodeData,
   VideoNodeData,
   UpscaleNodeData,
-  ImageUploadNodeData,
+  OutputNodeData,
   ConnectedInputs,
   DEFAULT_IMAGE_SETTINGS,
   DEFAULT_VIDEO_SETTINGS,
@@ -55,7 +55,7 @@ interface CanvasState {
 
   // Actions - Node Management
   addNode: (
-    type: "prompt" | "reference" | "image" | "video" | "upscale" | "imageUpload",
+    type: "prompt" | "reference" | "image" | "video" | "upscale" | "output",
     position: { x: number; y: number }
   ) => string;
   updateNodeData: <T>(nodeId: string, data: Partial<T>) => void;
@@ -130,10 +130,11 @@ function createUpscaleNodeData(): UpscaleNodeData {
   };
 }
 
-function createImageUploadNodeData(): ImageUploadNodeData {
+function createOutputNodeData(): OutputNodeData {
   return {
-    label: "Image Upload",
-    imageUrl: null,
+    label: "Output",
+    outputUrl: null,
+    outputType: "image",
   };
 }
 
@@ -181,7 +182,7 @@ export const useCanvasStore = create<CanvasState>()(
       // Node Management
       addNode: (type, position) => {
         const id = uuidv4();
-        let data: PromptNodeData | ReferenceNodeData | ImageNodeData | VideoNodeData | UpscaleNodeData | ImageUploadNodeData;
+        let data: PromptNodeData | ReferenceNodeData | ImageNodeData | VideoNodeData | UpscaleNodeData | OutputNodeData;
 
         switch (type) {
           case "prompt":
@@ -199,8 +200,8 @@ export const useCanvasStore = create<CanvasState>()(
           case "upscale":
             data = createUpscaleNodeData();
             break;
-          case "imageUpload":
-            data = createImageUploadNodeData();
+          case "output":
+            data = createOutputNodeData();
             break;
         }
 
@@ -310,9 +311,6 @@ export const useCanvasStore = create<CanvasState>()(
             }
             case "image":
               inputs.images.push(node.data as ImageNodeData);
-              break;
-            case "imageUpload":
-              inputs.imageUploads.push(node.data as ImageUploadNodeData);
               break;
           }
         }
