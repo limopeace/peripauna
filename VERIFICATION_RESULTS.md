@@ -88,9 +88,51 @@ None - all tested features work as expected.
 
 ---
 
+---
+
+## VideoNode Image-to-Video Verification (2025-01-23)
+
+### UI Options Verified
+
+| Category | Options | Status |
+|----------|---------|--------|
+| Model | Seedance 1.0/1.5, Runway Gen-3, Kling 1.5, Minimax, Luma | PASS |
+| Duration | 3, 5, 10, 15 seconds | PASS |
+| Resolution | 720p, 1080p, 4K | PASS |
+| Camera Movement | Static, Pan L/R, Zoom In/Out, Tilt Up/Down | PASS |
+| FPS | 24 (Film), 30 (Standard), 60 (Smooth) | PASS |
+| Seed | Optional number input | PASS |
+
+### Workflow Features Verified
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Video Workflow Role in ReferenceNode | PASS | single, before, after options |
+| Image URL input for I2V | PASS | Accepts HTTPS URLs |
+| Data URL validation | PASS | Rejects data URLs with clear error |
+| Prompt connection | PASS | Collects from connected PromptNodes |
+| Before/After transitions | PASS | Supports morphing workflows |
+| Cost estimation | PASS | Shows per-second pricing |
+| Polling (5 min timeout) | PASS | 300 polls × 1s |
+
+### Code Implementation Verified
+
+- `VideoNode.tsx` correctly collects inputs from connected nodes
+- API call includes all settings: prompt, negativePrompt, sourceImages, beforeImages, afterImages, settings
+- BytePlus API limitation handled: requires HTTPS URLs, not data URLs
+- Error messages are user-friendly
+
+### Screenshots
+
+- `/.playwright-mcp/video-node-full-options.png` - VideoNode with all settings expanded
+- `/.playwright-mcp/workflow-setup.png` - Workflow with Video, Prompt, Reference nodes
+
+---
+
 ## Sign-off
 
 - [x] All code quality checks pass
 - [x] No blocking issues
 - [x] Core features verified working
+- [x] VideoNode image-to-video flow verified
 - [x] Ready for Phase 2
