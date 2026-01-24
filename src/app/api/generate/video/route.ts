@@ -33,12 +33,13 @@ interface GenerateVideoRequest {
 }
 
 // BytePlus Content Generation API request format
+type BytePlusContentItem =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 interface BytePlusVideoRequest {
   model: string;
-  content: {
-    text: string;
-    image_urls?: string[];
-  }[];
+  content: BytePlusContentItem[];
 }
 
 // BytePlus Content Generation API response format
@@ -294,11 +295,10 @@ export async function POST(request: NextRequest) {
       sourceImageUrl = processedSourceImages[0];
     }
 
-    // Map model names to BytePlus model IDs
-    // BytePlus uses versioned model names like "seedance-1-0-lite-250428"
+    // Map model names to BytePlus endpoint IDs
     const modelMap: Record<string, string> = {
-      "seedance-1.0-lite": "seedance-1-0-lite-250428",
-      "seedance-1.5-pro": "seedance-1-0-pro-250528",
+      "seedance-1.0-lite": "ep-20260123184449-6tkbf",
+      "seedance-1.5-pro": "ep-20260123184449-6tkbf",
     };
 
     // Build prompt with parameters (BytePlus uses -- parameters in text)
@@ -311,11 +311,21 @@ export async function POST(request: NextRequest) {
     }
 
     // Prepare BytePlus Content Generation API request
+    const contentItems: BytePlusContentItem[] = [
+      { type: "text", text: promptWithParams }
+    ];
+
+    // Add image if provided (for image-to-video)
+    if (sourceImageUrl) {
+      contentItems.push({
+        type: "image_url",
+        image_url: { url: sourceImageUrl }
+      });
+    }
+
     const byteplusRequest: BytePlusVideoRequest = {
       model: modelMap[body.settings.model] || body.settings.model,
-      content: sourceImageUrl
-        ? [{ text: promptWithParams, image_urls: [sourceImageUrl] }]
-        : [{ text: promptWithParams }],
+      content: contentItems,
     };
 
     // Call BytePlus ModelArk Content Generation API with timeout
@@ -324,7 +334,7 @@ export async function POST(request: NextRequest) {
 
     let response: Response;
     try {
-      response = await fetch(`${ARK_API_BASE}/content_generation/tasks`, {
+      response = await fetch(`${ARK_API_BASE}/contents/generations/tasks`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

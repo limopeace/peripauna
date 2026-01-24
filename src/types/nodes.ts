@@ -145,7 +145,7 @@ export const DEFAULT_IMAGE_SETTINGS: ImageSettings = {
 };
 
 export const DEFAULT_VIDEO_SETTINGS: VideoSettings = {
-  model: "seedance-1.0-lite",
+  model: "seedance-1.5-pro",
   duration: 5,
   resolution: "720p",
   fps: 24,
