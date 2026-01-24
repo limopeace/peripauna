@@ -296,6 +296,22 @@ function VideoNodeComponent({ id, data, selected }: NodeProps) {
         </p>
       )}
 
+      {/* Draft Mode Toggle */}
+      <div className="flex items-center gap-2 mb-3 p-2 bg-amber-50 rounded-md border border-amber-200">
+        <input
+          type="checkbox"
+          id={`draft-${id}`}
+          checked={nodeData.settings.draft || false}
+          onChange={(e) => handleSettingChange("draft", e.target.checked)}
+          disabled={nodeData.isGenerating}
+          className="rounded border-amber-300"
+        />
+        <label htmlFor={`draft-${id}`} className="text-xs font-medium text-amber-700 flex-1">
+          Draft Mode
+          <span className="block text-amber-600 font-normal">Faster preview, lower quality</span>
+        </label>
+      </div>
+
       {/* Quick Settings */}
       <div className="grid grid-cols-2 gap-2 mb-3">
         {/* Duration */}

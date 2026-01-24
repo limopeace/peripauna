@@ -23,6 +23,7 @@ export interface VideoSettings {
   fps: number;
   cameraMovement?: "static" | "pan_left" | "pan_right" | "zoom_in" | "zoom_out" | "tilt_up" | "tilt_down";
   seed?: number;
+  draft?: boolean; // Fast draft mode for quick previews
 }
 
 export interface UpscaleSettings {
@@ -150,6 +151,7 @@ export const DEFAULT_VIDEO_SETTINGS: VideoSettings = {
   resolution: "720p",
   fps: 24,
   cameraMovement: "static",
+  draft: false,
 };
 
 export const DEFAULT_UPSCALE_SETTINGS: UpscaleSettings = {

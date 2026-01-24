@@ -304,10 +304,20 @@ export async function POST(request: NextRequest) {
     // Build prompt with parameters (BytePlus uses -- parameters in text)
     const resolution = body.settings.resolution || "720p";
     const duration = body.settings.duration || 5;
+    const isDraft = body.settings.draft || false;
     let promptWithParams = promptValidation.sanitized;
-    promptWithParams += ` --resolution ${resolution} --duration ${duration}`;
+    promptWithParams += ` --duration ${duration}`;
+    if (isDraft) {
+      promptWithParams += ` --quality draft`;
+    }
     if (body.settings.seed) {
       promptWithParams += ` --seed ${body.settings.seed}`;
+    }
+    // Camera movement control
+    if (body.settings.cameraMovement && body.settings.cameraMovement !== "static") {
+      promptWithParams += ` --camerafixed false`;
+    } else {
+      promptWithParams += ` --camerafixed true`;
     }
 
     // Prepare BytePlus Content Generation API request
