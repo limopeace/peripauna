@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   History,
   Image as ImageIcon,
@@ -10,7 +10,7 @@ import {
   Trash2,
   Search,
   Filter,
-  X,
+  Maximize2,
 } from "lucide-react";
 import { useHistoryStore } from "@/lib/stores/historyStore";
 import { GenerationRecord } from "@/types/history";
@@ -18,6 +18,7 @@ import { downloadGeneration } from "@/lib/services/downloadManager";
 import { formatCost } from "@/lib/utils/costCalculator";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
+import { Lightbox } from "@/components/ui/Lightbox";
 
 // ============================================
 // History Panel Component
@@ -41,12 +42,38 @@ export function HistoryPanel() {
 
   const [showFilters, setShowFilters] = useState(false);
 
+  // Lightbox state
+  const [lightboxRecord, setLightboxRecord] = useState<GenerationRecord | null>(null);
+
   // Load history on mount
   useEffect(() => {
     loadHistory();
   }, [loadHistory]);
 
   const filteredRecords = getFilteredRecords();
+
+  // Lightbox navigation
+  const currentIndex = lightboxRecord
+    ? filteredRecords.findIndex((r) => r.id === lightboxRecord.id)
+    : -1;
+
+  const handleLightboxPrev = useCallback(() => {
+    if (currentIndex > 0) {
+      setLightboxRecord(filteredRecords[currentIndex - 1]);
+    }
+  }, [currentIndex, filteredRecords]);
+
+  const handleLightboxNext = useCallback(() => {
+    if (currentIndex < filteredRecords.length - 1) {
+      setLightboxRecord(filteredRecords[currentIndex + 1]);
+    }
+  }, [currentIndex, filteredRecords]);
+
+  const handleLightboxDownload = useCallback(async () => {
+    if (lightboxRecord) {
+      await downloadGeneration(lightboxRecord);
+    }
+  }, [lightboxRecord]);
 
   return (
     <div className="flex flex-col h-full">
@@ -169,11 +196,29 @@ export function HistoryPanel() {
                 onSelect={() => selectRecord(record.id)}
                 onFavorite={() => toggleFavorite(record.id)}
                 onDelete={() => deleteRecord(record.id)}
+                onEnlarge={() => setLightboxRecord(record)}
               />
             ))}
           </div>
         )}
       </div>
+
+      {/* Lightbox for enlarged preview */}
+      {lightboxRecord && lightboxRecord.outputUrl && (
+        <Lightbox
+          isOpen={true}
+          onClose={() => setLightboxRecord(null)}
+          type={lightboxRecord.type}
+          url={lightboxRecord.outputUrl}
+          title={lightboxRecord.prompt?.substring(0, 100)}
+          subtitle={`${lightboxRecord.model} • ${formatDistanceToNow(new Date(lightboxRecord.createdAt), { addSuffix: true })}`}
+          onDownload={handleLightboxDownload}
+          onPrevious={currentIndex > 0 ? handleLightboxPrev : undefined}
+          onNext={currentIndex < filteredRecords.length - 1 ? handleLightboxNext : undefined}
+          hasPrevious={currentIndex > 0}
+          hasNext={currentIndex < filteredRecords.length - 1}
+        />
+      )}
     </div>
   );
 }
@@ -188,6 +233,7 @@ interface HistoryItemProps {
   onSelect: () => void;
   onFavorite: () => void;
   onDelete: () => void;
+  onEnlarge: () => void;
 }
 
 function HistoryItem({
@@ -196,6 +242,7 @@ function HistoryItem({
   onSelect,
   onFavorite,
   onDelete,
+  onEnlarge,
 }: HistoryItemProps) {
   const [isDownloading, setIsDownloading] = useState(false);
 
@@ -238,22 +285,34 @@ function HistoryItem({
       )}
     >
       <div className="flex gap-3">
-        {/* Thumbnail */}
-        <div className="w-14 h-14 rounded-md overflow-hidden bg-muted flex-shrink-0">
+        {/* Thumbnail - clickable for enlargement */}
+        <div
+          className="w-14 h-14 rounded-md overflow-hidden bg-muted flex-shrink-0 relative group cursor-pointer"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (record.outputUrl) onEnlarge();
+          }}
+        >
           {record.outputUrl || record.thumbnailUrl ? (
-            record.type === "image" ? (
-              <img
-                src={record.thumbnailUrl || record.outputUrl}
-                alt="Thumbnail"
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <video
-                src={record.outputUrl}
-                className="w-full h-full object-cover"
-                muted
-              />
-            )
+            <>
+              {record.type === "image" ? (
+                <img
+                  src={record.thumbnailUrl || record.outputUrl}
+                  alt="Thumbnail"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <video
+                  src={record.outputUrl}
+                  className="w-full h-full object-cover"
+                  muted
+                />
+              )}
+              {/* Enlarge overlay on hover */}
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <Maximize2 size={16} className="text-white" />
+              </div>
+            </>
           ) : (
             <div className="w-full h-full flex items-center justify-center">
               {record.type === "image" ? (
@@ -310,21 +369,36 @@ function HistoryItem({
               ? "text-yellow-500"
               : "text-muted-foreground hover:text-foreground"
           )}
+          title="Favorite"
         >
           <Star size={12} className={record.favorite ? "fill-current" : ""} />
         </button>
         {record.outputUrl && (
-          <button
-            onClick={handleDownload}
-            disabled={isDownloading}
-            className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-          >
-            <Download size={12} />
-          </button>
+          <>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onEnlarge();
+              }}
+              className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
+              title="View full size"
+            >
+              <Maximize2 size={12} />
+            </button>
+            <button
+              onClick={handleDownload}
+              disabled={isDownloading}
+              className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+              title="Download"
+            >
+              <Download size={12} />
+            </button>
+          </>
         )}
         <button
           onClick={handleDelete}
           className="p-1 rounded text-muted-foreground hover:text-red-500 transition-colors"
+          title="Delete"
         >
           <Trash2 size={12} />
         </button>

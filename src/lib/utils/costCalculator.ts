@@ -40,7 +40,7 @@ export function calculateImageGenerationCost(
     };
   }
 
-  let cost = pricing.costPerGeneration || 0;
+  const cost = pricing.costPerGeneration || 0;
 
   // Future: Adjust for resolution if costPerPixel is defined
   // if (pricing.costPerPixel && settings?.aspectRatio) { ... }

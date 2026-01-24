@@ -89,6 +89,20 @@ export interface UpscaleNodeData {
   [key: string]: unknown;
 }
 
+export interface ImageUploadNodeData {
+  label: string;
+  imageUrl: string | null;       // Can be data URL (local) or HTTPS URL
+  thumbnailUrl?: string;
+  fileName?: string;
+  fileSize?: number;             // In bytes
+  dimensions?: {
+    width: number;
+    height: number;
+  };
+  uploadedAt?: string;           // ISO date string
+  [key: string]: unknown;
+}
+
 // ============================================
 // Custom Node Types
 // ============================================
@@ -98,8 +112,9 @@ export type ReferenceNode = Node<ReferenceNodeData, "reference">;
 export type ImageNode = Node<ImageNodeData, "image">;
 export type VideoNode = Node<VideoNodeData, "video">;
 export type UpscaleNode = Node<UpscaleNodeData, "upscale">;
+export type ImageUploadNode = Node<ImageUploadNodeData, "imageUpload">;
 
-export type AppNode = PromptNode | ReferenceNode | ImageNode | VideoNode | UpscaleNode;
+export type AppNode = PromptNode | ReferenceNode | ImageNode | VideoNode | UpscaleNode | ImageUploadNode;
 export type AppEdge = Edge;
 
 // ============================================
@@ -110,6 +125,7 @@ export interface ConnectedInputs {
   prompts: PromptNodeData[];
   references: ReferenceNodeData[];
   images: ImageNodeData[];
+  imageUploads: ImageUploadNodeData[];
   // Grouped references for before/after workflows
   beforeImages?: ReferenceNodeData[];
   afterImages?: ReferenceNodeData[];

@@ -75,35 +75,30 @@ function VideoNodeComponent({ id, data, selected }: NodeProps) {
       }
     }
 
-    // Collect source images (references + generated images)
+    // Collect source images (references + generated images + uploaded images)
+    // Note: Both data URLs (local uploads) and HTTPS URLs are now supported
+    // The API will automatically convert data URLs to hosted URLs
     const sourceImages: string[] = [];
 
-    // Add reference images - check for data URLs (local uploads)
+    // Add reference images (supports both data URLs and HTTPS URLs)
     for (const ref of inputs.references) {
       if (ref.imageUrl) {
-        // Check if it's a local upload (data URL)
-        if (ref.imageUrl.startsWith("data:")) {
-          updateNodeData<VideoNodeData>(id, {
-            error: "Image-to-video requires hosted images. Use an image URL in the Reference node, or connect an Image node output instead.",
-          });
-          return;
-        }
         sourceImages.push(ref.imageUrl);
       }
     }
 
     // Add generated image outputs (for I2V workflows)
-    // Note: Generated images from Gemini are returned as data URLs,
-    // which also won't work with BytePlus API
+    // Data URLs from Gemini are now automatically converted server-side
     for (const img of inputs.images) {
       if (img.outputUrl) {
-        if (img.outputUrl.startsWith("data:")) {
-          updateNodeData<VideoNodeData>(id, {
-            error: "Generated images need to be hosted. This feature is coming soon - for now, use text-to-video mode.",
-          });
-          return;
-        }
         sourceImages.push(img.outputUrl);
+      }
+    }
+
+    // Add uploaded images from ImageUploadNode
+    for (const upload of inputs.imageUploads) {
+      if (upload.imageUrl) {
+        sourceImages.push(upload.imageUrl);
       }
     }
 

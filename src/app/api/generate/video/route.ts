@@ -6,6 +6,10 @@ import {
   getRateLimitKey,
   formatResetTime,
 } from "@/lib/services/rateLimiter";
+import {
+  storeDataUrl,
+  parseDataUrl,
+} from "@/lib/services/imageHosting";
 
 // ============================================
 // Video Generation API Route - BytePlus ModelArk
@@ -61,35 +65,50 @@ function validateImageUrl(url: string | null | undefined): { valid: boolean; isD
 
   // Allow data URLs for locally uploaded images
   if (url.startsWith("data:image/")) {
-    // Validate it's a proper data URL format
-    const dataUrlPattern = /^data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/=]+$/;
-    // For very long base64 strings, just check the prefix
-    if (url.length > 100) {
-      const prefix = url.substring(0, 50);
-      const validPrefix = /^data:image\/(png|jpeg|jpg|gif|webp);base64,/.test(prefix);
-      return { valid: validPrefix, isDataUrl: true };
-    }
-    return { valid: dataUrlPattern.test(url), isDataUrl: true };
+    // Validate it's a proper data URL format using our parser
+    const parsed = parseDataUrl(url);
+    return { valid: parsed !== null, isDataUrl: true };
   }
 
   try {
     const parsed = new URL(url);
-    // Only allow HTTPS URLs
-    if (parsed.protocol !== "https:") return { valid: false, isDataUrl: false };
-    // Prevent localhost and private IPs (SSRF protection)
-    if (
-      parsed.hostname === "localhost" ||
-      parsed.hostname === "127.0.0.1" ||
-      parsed.hostname.startsWith("192.168.") ||
-      parsed.hostname.startsWith("10.") ||
-      parsed.hostname.startsWith("172.")
-    ) {
+    // Only allow HTTPS URLs (and HTTP for localhost in development)
+    const isDev = process.env.NODE_ENV === "development";
+    if (parsed.protocol !== "https:" && !(isDev && parsed.protocol === "http:")) {
       return { valid: false, isDataUrl: false };
+    }
+    // Prevent private IPs (SSRF protection) - but allow localhost in dev
+    if (!isDev) {
+      if (
+        parsed.hostname === "localhost" ||
+        parsed.hostname === "127.0.0.1" ||
+        parsed.hostname.startsWith("192.168.") ||
+        parsed.hostname.startsWith("10.") ||
+        parsed.hostname.startsWith("172.")
+      ) {
+        return { valid: false, isDataUrl: false };
+      }
     }
     return { valid: true, isDataUrl: false };
   } catch {
     return { valid: false, isDataUrl: false };
   }
+}
+
+/**
+ * Convert data URL to hosted URL for BytePlus API
+ */
+function convertDataUrlToHosted(
+  dataUrl: string,
+  request: NextRequest
+): string {
+  const stored = storeDataUrl(dataUrl);
+
+  // Build absolute URL using request headers
+  const protocol = request.headers.get("x-forwarded-proto") || "http";
+  const host = request.headers.get("host") || "localhost:3000";
+
+  return `${protocol}://${host}${stored.hostedPath}`;
 }
 
 /**
@@ -191,40 +210,88 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Determine workflow type and validate source image URL
+    // Determine workflow type
     let workflowType = "text-to-video";
-    let sourceImageUrl: string | undefined;
-
     if (hasBeforeAfter) {
       workflowType = "before-after-transition";
-      sourceImageUrl = body.beforeImages?.[0];
     } else if (hasSourceImages) {
       workflowType = "image-to-video";
-      sourceImageUrl = body.sourceImages?.[0];
     }
 
-    // Security: Validate image URL to prevent SSRF
-    if (sourceImageUrl) {
-      const validation = validateImageUrl(sourceImageUrl);
-      if (!validation.valid) {
-        return NextResponse.json(
-          { error: "Invalid or unsafe image URL" },
-          { status: 400 }
-        );
-      }
+    // Process all source images - convert data URLs to hosted URLs
+    const processedSourceImages: string[] = [];
 
-      // Handle data URLs (locally uploaded images)
-      // Note: BytePlus API requires publicly accessible HTTPS URLs
-      // Data URLs cannot be used directly - need to be hosted first
-      if (validation.isDataUrl) {
-        return NextResponse.json(
-          {
-            error: "Image-to-video requires a hosted image URL. Local uploads are not yet supported. Please use an image URL (https://) or generate an image first.",
-            code: "DATA_URL_NOT_SUPPORTED"
-          },
-          { status: 400 }
-        );
+    // Process source images array
+    if (body.sourceImages && body.sourceImages.length > 0) {
+      for (const imgUrl of body.sourceImages) {
+        const validation = validateImageUrl(imgUrl);
+        if (!validation.valid) {
+          return NextResponse.json(
+            { error: "Invalid or unsafe image URL" },
+            { status: 400 }
+          );
+        }
+
+        if (validation.isDataUrl) {
+          // Convert data URL to hosted URL
+          const hostedUrl = convertDataUrlToHosted(imgUrl, request);
+          processedSourceImages.push(hostedUrl);
+        } else {
+          processedSourceImages.push(imgUrl);
+        }
       }
+    }
+
+    // Process before/after images
+    const processedBeforeImages: string[] = [];
+    const processedAfterImages: string[] = [];
+
+    if (body.beforeImages && body.beforeImages.length > 0) {
+      for (const imgUrl of body.beforeImages) {
+        if (!imgUrl) continue;
+        const validation = validateImageUrl(imgUrl);
+        if (!validation.valid) {
+          return NextResponse.json(
+            { error: "Invalid or unsafe before image URL" },
+            { status: 400 }
+          );
+        }
+
+        if (validation.isDataUrl) {
+          const hostedUrl = convertDataUrlToHosted(imgUrl, request);
+          processedBeforeImages.push(hostedUrl);
+        } else {
+          processedBeforeImages.push(imgUrl);
+        }
+      }
+    }
+
+    if (body.afterImages && body.afterImages.length > 0) {
+      for (const imgUrl of body.afterImages) {
+        if (!imgUrl) continue;
+        const validation = validateImageUrl(imgUrl);
+        if (!validation.valid) {
+          return NextResponse.json(
+            { error: "Invalid or unsafe after image URL" },
+            { status: 400 }
+          );
+        }
+
+        if (validation.isDataUrl) {
+          const hostedUrl = convertDataUrlToHosted(imgUrl, request);
+          processedAfterImages.push(hostedUrl);
+        } else {
+          processedAfterImages.push(imgUrl);
+        }
+      }
+    }
+
+    // Determine the primary source image URL for the API
+    let sourceImageUrl: string | undefined;
+    if (processedBeforeImages.length > 0) {
+      sourceImageUrl = processedBeforeImages[0];
+    } else if (processedSourceImages.length > 0) {
+      sourceImageUrl = processedSourceImages[0];
     }
 
     // Map model names to BytePlus model IDs

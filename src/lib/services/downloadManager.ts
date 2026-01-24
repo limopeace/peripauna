@@ -60,6 +60,31 @@ export async function downloadFile(
 }
 
 /**
+ * Convert data URL to blob
+ */
+function dataUrlToBlob(dataUrl: string): Blob {
+  const [header, base64Data] = dataUrl.split(",");
+  const mimeMatch = header.match(/data:([^;]+)/);
+  const mimeType = mimeMatch ? mimeMatch[1] : "application/octet-stream";
+
+  const byteCharacters = atob(base64Data);
+  const byteNumbers = new Array(byteCharacters.length);
+  for (let i = 0; i < byteCharacters.length; i++) {
+    byteNumbers[i] = byteCharacters.charCodeAt(i);
+  }
+  const byteArray = new Uint8Array(byteNumbers);
+
+  return new Blob([byteArray], { type: mimeType });
+}
+
+/**
+ * Check if URL is a data URL
+ */
+function isDataUrl(url: string): boolean {
+  return url.startsWith("data:");
+}
+
+/**
  * Download a generation output with tracking
  */
 export async function downloadGeneration(
@@ -73,11 +98,18 @@ export async function downloadGeneration(
   const filename = generateFilename(record);
 
   try {
-    // Fetch to get file size
-    const response = await fetch(record.outputUrl);
-    if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
+    let blob: Blob;
 
-    const blob = await response.blob();
+    // Handle data URLs differently from regular URLs
+    if (isDataUrl(record.outputUrl)) {
+      blob = dataUrlToBlob(record.outputUrl);
+    } else {
+      // Fetch remote URL
+      const response = await fetch(record.outputUrl);
+      if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
+      blob = await response.blob();
+    }
+
     const blobUrl = URL.createObjectURL(blob);
 
     // Trigger download
@@ -134,12 +166,19 @@ export async function downloadGenerationsAsZip(
     }
 
     try {
-      const response = await fetch(record.outputUrl);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+      let blob: Blob;
+
+      // Handle data URLs differently from regular URLs
+      if (isDataUrl(record.outputUrl)) {
+        blob = dataUrlToBlob(record.outputUrl);
+      } else {
+        const response = await fetch(record.outputUrl);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        blob = await response.blob();
       }
 
-      const blob = await response.blob();
       const filename = generateFilename(record);
 
       zip.file(filename, blob);
