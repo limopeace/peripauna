@@ -20,6 +20,7 @@ import {
   ImageNodeData,
   VideoNodeData,
   UpscaleNodeData,
+  ImageUploadNodeData,
   ConnectedInputs,
   DEFAULT_IMAGE_SETTINGS,
   DEFAULT_VIDEO_SETTINGS,
@@ -54,7 +55,7 @@ interface CanvasState {
 
   // Actions - Node Management
   addNode: (
-    type: "prompt" | "reference" | "image" | "video" | "upscale",
+    type: "prompt" | "reference" | "image" | "video" | "upscale" | "imageUpload",
     position: { x: number; y: number }
   ) => string;
   updateNodeData: <T>(nodeId: string, data: Partial<T>) => void;
@@ -129,6 +130,13 @@ function createUpscaleNodeData(): UpscaleNodeData {
   };
 }
 
+function createImageUploadNodeData(): ImageUploadNodeData {
+  return {
+    label: "Image Upload",
+    imageUrl: null,
+  };
+}
+
 // ============================================
 // Canvas Store Implementation
 // ============================================
@@ -173,7 +181,7 @@ export const useCanvasStore = create<CanvasState>()(
       // Node Management
       addNode: (type, position) => {
         const id = uuidv4();
-        let data: PromptNodeData | ReferenceNodeData | ImageNodeData | VideoNodeData | UpscaleNodeData;
+        let data: PromptNodeData | ReferenceNodeData | ImageNodeData | VideoNodeData | UpscaleNodeData | ImageUploadNodeData;
 
         switch (type) {
           case "prompt":
@@ -190,6 +198,9 @@ export const useCanvasStore = create<CanvasState>()(
             break;
           case "upscale":
             data = createUpscaleNodeData();
+            break;
+          case "imageUpload":
+            data = createImageUploadNodeData();
             break;
         }
 
@@ -276,6 +287,7 @@ export const useCanvasStore = create<CanvasState>()(
           prompts: [],
           references: [],
           images: [],
+          imageUploads: [],
           beforeImages: [],
           afterImages: [],
         };
@@ -298,6 +310,9 @@ export const useCanvasStore = create<CanvasState>()(
             }
             case "image":
               inputs.images.push(node.data as ImageNodeData);
+              break;
+            case "imageUpload":
+              inputs.imageUploads.push(node.data as ImageUploadNodeData);
               break;
           }
         }
