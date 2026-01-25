@@ -312,14 +312,20 @@ export async function POST(request: NextRequest) {
     const resolution = body.settings.resolution || "720p";
     let duration = body.settings.duration || 5;
 
+    // Debug: Log incoming values
+    console.log(`Video generation request - model: ${body.settings.model}, duration: ${duration}`);
+
     // Validate duration against model constraints
     const allowedDurations = modelDurationConstraints[body.settings.model];
+    console.log(`Allowed durations for ${body.settings.model}:`, allowedDurations);
+
     if (allowedDurations && !allowedDurations.includes(duration)) {
       // Find the nearest valid duration
+      const originalDuration = duration;
       duration = allowedDurations.reduce((prev, curr) =>
-        Math.abs(curr - duration) < Math.abs(prev - duration) ? curr : prev
+        Math.abs(curr - originalDuration) < Math.abs(prev - originalDuration) ? curr : prev
       );
-      console.log(`Adjusted duration from ${body.settings.duration}s to ${duration}s for model ${body.settings.model}`);
+      console.log(`Adjusted duration from ${originalDuration}s to ${duration}s for model ${body.settings.model}`);
     }
     const isDraft = body.settings.draft || false;
     let promptWithParams = promptValidation.sanitized;
