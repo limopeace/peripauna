@@ -302,10 +302,11 @@ export async function POST(request: NextRequest) {
     };
 
     // Model-specific duration constraints
-    // Seedance 1.5 Pro only supports 5, 10, or 15 second durations (not 3)
+    // Note: Both seedance models currently use the same BytePlus endpoint (ep-20260123184449-6tkbf)
+    // which is Seedance 1.5 Pro and only supports 5, 10, or 15 second durations (not 3)
     const modelDurationConstraints: Record<string, number[]> = {
       "seedance-1.5-pro": [5, 10, 15],
-      "seedance-1.0-lite": [3, 5, 10, 15],
+      "seedance-1.0-lite": [5, 10, 15], // Same as Pro since they share the same endpoint
     };
 
     // Build prompt with parameters (BytePlus uses -- parameters in text)
