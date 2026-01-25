@@ -21,8 +21,13 @@ interface BytePlusStatusResponse {
     code: string;
     message: string;
   };
-  output?: {
+  // Note: BytePlus uses "content" not "output" for video generation results
+  content?: {
     video_url?: string;
+  };
+  usage?: {
+    completion_tokens: number;
+    total_tokens: number;
   };
 }
 
@@ -131,16 +136,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const result: BytePlusStatusResponse = await response.json();
+    const result = await response.json() as BytePlusStatusResponse;
 
-    // Debug: Log status response for troubleshooting
-    console.log("BytePlus status response:", {
-      taskId: result.id,
-      status: result.status,
-      hasOutput: !!result.output,
-      videoUrl: result.output?.video_url ? "present" : "none",
-      error: result.error?.message,
-    });
+    // Debug: Log status (reduced logging)
+    if (result.status === "succeeded" || result.status === "failed") {
+      console.log("BytePlus task completed:", {
+        taskId: result.id,
+        status: result.status,
+        hasVideo: !!result.content?.video_url,
+      });
+    }
 
     // Map BytePlus Content Generation API status to our internal format
     const statusMap: Record<string, string> = {
@@ -152,8 +157,9 @@ export async function GET(request: NextRequest) {
     };
 
     // Security: Validate video URL if present
+    // Note: BytePlus uses "content.video_url" not "output.video_url"
     let validatedOutput: string | undefined;
-    const videoUrl = result.output?.video_url;
+    const videoUrl = result.content?.video_url;
     if (videoUrl) {
       try {
         const parsedUrl = new URL(videoUrl);
