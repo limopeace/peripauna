@@ -303,14 +303,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Determine the primary source image URL for the API
-    let sourceImageUrl: string | undefined;
-    if (processedBeforeImages.length > 0) {
-      sourceImageUrl = processedBeforeImages[0];
-    } else if (processedSourceImages.length > 0) {
-      sourceImageUrl = processedSourceImages[0];
-    }
-
     // Map model names to BytePlus endpoint IDs
     const modelMap: Record<string, string> = {
       "seedance-1.0-lite": "ep-20260123184449-6tkbf",
@@ -365,11 +357,31 @@ export async function POST(request: NextRequest) {
       { type: "text", text: promptWithParams }
     ];
 
-    // Add image if provided (for image-to-video)
-    if (sourceImageUrl) {
+    // Add images for video generation
+    // For before/after transitions: add both images (first frame + last frame)
+    // For single image-to-video: add just the source image
+    if (processedBeforeImages.length > 0 && processedAfterImages.length > 0) {
+      // Before/after transition: first image is start frame, second is end frame
+      console.log("Adding before/after images for transition video");
       contentItems.push({
         type: "image_url",
-        image_url: { url: sourceImageUrl }
+        image_url: { url: processedBeforeImages[0] }
+      });
+      contentItems.push({
+        type: "image_url",
+        image_url: { url: processedAfterImages[0] }
+      });
+    } else if (processedBeforeImages.length > 0) {
+      // Only before image (start frame only)
+      contentItems.push({
+        type: "image_url",
+        image_url: { url: processedBeforeImages[0] }
+      });
+    } else if (processedSourceImages.length > 0) {
+      // Standard image-to-video with source image
+      contentItems.push({
+        type: "image_url",
+        image_url: { url: processedSourceImages[0] }
       });
     }
 
