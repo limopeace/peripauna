@@ -20,8 +20,8 @@ import {
 const ARK_API_BASE = "https://ark.ap-southeast.bytepluses.com/api/v3";
 const ARK_API_KEY = process.env.ARK_API_KEY;
 
-// Security: Request size limit (1MB)
-const MAX_REQUEST_SIZE = 1048576;
+// Security: Request size limit (15MB for video generation with multiple images)
+const MAX_REQUEST_SIZE = 15728640;
 
 interface GenerateVideoRequest {
   prompt: string;
