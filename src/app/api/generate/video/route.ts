@@ -6,10 +6,7 @@ import {
   getRateLimitKey,
   formatResetTime,
 } from "@/lib/services/rateLimiter";
-import {
-  storeDataUrl,
-  parseDataUrl,
-} from "@/lib/services/imageHosting";
+import { parseDataUrl } from "@/lib/services/imageHosting";
 
 // ============================================
 // Video Generation API Route - BytePlus ModelArk
@@ -97,19 +94,49 @@ function validateImageUrl(url: string | null | undefined): { valid: boolean; isD
 }
 
 /**
- * Convert data URL to hosted URL for BytePlus API
+ * Process image URL for BytePlus API
+ * - Data URLs are sent directly (BytePlus supports base64 data URLs)
+ * - HTTPS URLs are passed through
+ * - Localhost URLs need to be converted to data URLs first
  */
-function convertDataUrlToHosted(
-  dataUrl: string,
+async function processImageForBytePlus(
+  imageUrl: string,
   request: NextRequest
-): string {
-  const stored = storeDataUrl(dataUrl);
+): Promise<string> {
+  // Data URLs can be sent directly to BytePlus
+  if (imageUrl.startsWith("data:image/")) {
+    return imageUrl;
+  }
 
-  // Build absolute URL using request headers
-  const protocol = request.headers.get("x-forwarded-proto") || "http";
-  const host = request.headers.get("host") || "localhost:3000";
+  // Check if it's a localhost URL that we need to fetch and convert
+  try {
+    const parsed = new URL(imageUrl);
+    const isLocalhost =
+      parsed.hostname === "localhost" ||
+      parsed.hostname === "127.0.0.1" ||
+      parsed.hostname.startsWith("192.168.") ||
+      parsed.hostname.startsWith("10.");
 
-  return `${protocol}://${host}${stored.hostedPath}`;
+    if (isLocalhost) {
+      // Fetch the image from localhost and convert to base64
+      const response = await fetch(imageUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image from ${imageUrl}`);
+      }
+
+      const contentType = response.headers.get("content-type") || "image/png";
+      const arrayBuffer = await response.arrayBuffer();
+      const base64 = Buffer.from(arrayBuffer).toString("base64");
+
+      return `data:${contentType};base64,${base64}`;
+    }
+  } catch (error) {
+    // If parsing fails or fetch fails, try to use the URL directly
+    console.warn("Could not process image URL:", error);
+  }
+
+  // HTTPS URLs can be passed directly
+  return imageUrl;
 }
 
 /**
@@ -219,7 +246,8 @@ export async function POST(request: NextRequest) {
       workflowType = "image-to-video";
     }
 
-    // Process all source images - convert data URLs to hosted URLs
+    // Process all source images - convert to base64 data URLs for BytePlus
+    // BytePlus API supports base64 data URLs directly, which solves localhost accessibility issues
     const processedSourceImages: string[] = [];
 
     // Process source images array
@@ -233,13 +261,9 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        if (validation.isDataUrl) {
-          // Convert data URL to hosted URL
-          const hostedUrl = convertDataUrlToHosted(imgUrl, request);
-          processedSourceImages.push(hostedUrl);
-        } else {
-          processedSourceImages.push(imgUrl);
-        }
+        // Process image for BytePlus (converts localhost URLs to base64)
+        const processedUrl = await processImageForBytePlus(imgUrl, request);
+        processedSourceImages.push(processedUrl);
       }
     }
 
@@ -258,12 +282,8 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        if (validation.isDataUrl) {
-          const hostedUrl = convertDataUrlToHosted(imgUrl, request);
-          processedBeforeImages.push(hostedUrl);
-        } else {
-          processedBeforeImages.push(imgUrl);
-        }
+        const processedUrl = await processImageForBytePlus(imgUrl, request);
+        processedBeforeImages.push(processedUrl);
       }
     }
 
@@ -278,12 +298,8 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        if (validation.isDataUrl) {
-          const hostedUrl = convertDataUrlToHosted(imgUrl, request);
-          processedAfterImages.push(hostedUrl);
-        } else {
-          processedAfterImages.push(imgUrl);
-        }
+        const processedUrl = await processImageForBytePlus(imgUrl, request);
+        processedAfterImages.push(processedUrl);
       }
     }
 
