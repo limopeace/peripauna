@@ -252,7 +252,14 @@ function VideoNodeComponent({ id, data, selected }: NodeProps) {
         </label>
         <select
           value={nodeData.settings.model}
-          onChange={(e) => handleSettingChange("model", e.target.value)}
+          onChange={(e) => {
+            const newModel = e.target.value;
+            handleSettingChange("model", newModel);
+            // Auto-adjust duration if switching to Seedance 1.5 Pro with 3 sec selected
+            if (newModel === "seedance-1.5-pro" && nodeData.settings.duration === 3) {
+              handleSettingChange("duration", 5);
+            }
+          }}
           disabled={nodeData.isGenerating}
           className="w-full px-2 py-1.5 text-sm bg-background border border-input rounded-md focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
         >
@@ -327,7 +334,10 @@ function VideoNodeComponent({ id, data, selected }: NodeProps) {
             disabled={nodeData.isGenerating}
             className="w-full mt-1 px-2 py-1 text-xs bg-background border border-input rounded focus:outline-none"
           >
-            <option value={3}>3 sec</option>
+            {/* Seedance 1.5 Pro only supports 5+ seconds */}
+            {nodeData.settings.model !== "seedance-1.5-pro" && (
+              <option value={3}>3 sec</option>
+            )}
             <option value={5}>5 sec</option>
             <option value={10}>10 sec</option>
             <option value={15}>15 sec</option>

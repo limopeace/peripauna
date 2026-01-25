@@ -301,9 +301,26 @@ export async function POST(request: NextRequest) {
       "seedance-1.5-pro": "ep-20260123184449-6tkbf",
     };
 
+    // Model-specific duration constraints
+    // Seedance 1.5 Pro only supports 5, 10, or 15 second durations (not 3)
+    const modelDurationConstraints: Record<string, number[]> = {
+      "seedance-1.5-pro": [5, 10, 15],
+      "seedance-1.0-lite": [3, 5, 10, 15],
+    };
+
     // Build prompt with parameters (BytePlus uses -- parameters in text)
     const resolution = body.settings.resolution || "720p";
-    const duration = body.settings.duration || 5;
+    let duration = body.settings.duration || 5;
+
+    // Validate duration against model constraints
+    const allowedDurations = modelDurationConstraints[body.settings.model];
+    if (allowedDurations && !allowedDurations.includes(duration)) {
+      // Find the nearest valid duration
+      duration = allowedDurations.reduce((prev, curr) =>
+        Math.abs(curr - duration) < Math.abs(prev - duration) ? curr : prev
+      );
+      console.log(`Adjusted duration from ${body.settings.duration}s to ${duration}s for model ${body.settings.model}`);
+    }
     const isDraft = body.settings.draft || false;
     let promptWithParams = promptValidation.sanitized;
     promptWithParams += ` --duration ${duration}`;
