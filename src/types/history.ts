@@ -124,6 +124,71 @@ export interface WorkflowExecution {
 }
 
 // ============================================
+// Saved Workflow
+// ============================================
+
+export interface SavedWorkflow {
+  id: string;
+  name: string;
+  description?: string;
+  templateId?: string; // If created from a template
+  createdAt: Date;
+  updatedAt: Date;
+
+  // Canvas state snapshot
+  canvas: {
+    nodes: unknown[]; // AppNode[]
+    edges: unknown[]; // AppEdge[]
+    viewport: { x: number; y: number; zoom: number };
+  };
+
+  // Execution history
+  lastExecutionId?: string;
+  executionCount: number;
+
+  // Organization
+  tags?: string[];
+  favorite?: boolean;
+
+  // Thumbnail - stores a small preview of the canvas
+  thumbnailUrl?: string;
+}
+
+// ============================================
+// Workflow Template
+// ============================================
+
+export interface WorkflowTemplate {
+  id: string;
+  name: string;
+  description: string;
+  category: "image-to-video" | "text-to-video" | "enhancement" | "custom";
+
+  // Pre-configured nodes
+  nodes: Array<{
+    type: "prompt" | "reference" | "image" | "video" | "upscale" | "imageUpload";
+    position: { x: number; y: number };
+    data: Record<string, unknown>;
+  }>;
+
+  // Pre-configured edges
+  edges: Array<{
+    sourceIndex: number;
+    targetIndex: number;
+    sourceHandle?: string;
+    targetHandle?: string;
+  }>;
+
+  // Default settings
+  defaults?: {
+    imageModel?: string;
+    videoModel?: string;
+    videoResolution?: "720p" | "1080p";
+    videoDuration?: number;
+  };
+}
+
+// ============================================
 // Project Export/Import
 // ============================================
 

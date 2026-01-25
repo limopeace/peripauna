@@ -221,3 +221,119 @@ export async function ensureBucketExists(): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Upload image from data URL directly to Supabase
+ */
+export async function uploadDataUrl(
+  dataUrl: string,
+  filename?: string
+): Promise<string | null> {
+  const client = getClient();
+  if (!client) {
+    console.warn("Supabase not configured, skipping upload");
+    return null;
+  }
+
+  try {
+    // Parse data URL
+    const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+    if (!match) {
+      throw new Error("Invalid data URL format");
+    }
+
+    const mimeType = match[1];
+    const base64Data = match[2];
+    const buffer = Buffer.from(base64Data, "base64");
+    const blob = new Blob([buffer], { type: mimeType });
+
+    // Determine file extension
+    const extMap: Record<string, string> = {
+      "image/png": "png",
+      "image/jpeg": "jpg",
+      "image/webp": "webp",
+      "video/mp4": "mp4",
+    };
+    const extension = extMap[mimeType] || "png";
+    const type = mimeType.startsWith("video/") ? "video" : "image";
+    const finalFilename = filename || `${type}/${uuidv4()}.${extension}`;
+
+    // Upload to Supabase Storage
+    const { data, error } = await client.storage
+      .from(BUCKET_NAME)
+      .upload(finalFilename, blob, {
+        contentType: mimeType,
+        cacheControl: "31536000",
+        upsert: true,
+      });
+
+    if (error) {
+      console.error("Upload error:", error);
+      return null;
+    }
+
+    // Get public URL
+    const {
+      data: { publicUrl },
+    } = client.storage.from(BUCKET_NAME).getPublicUrl(data.path);
+
+    return publicUrl;
+  } catch (error) {
+    console.error("Failed to upload data URL:", error);
+    return null;
+  }
+}
+
+/**
+ * Clear all files from storage (when quota is exceeded)
+ */
+export async function clearAllStorage(): Promise<boolean> {
+  const client = getClient();
+  if (!client) return false;
+
+  try {
+    // List and delete all images
+    const { data: images } = await client.storage.from(BUCKET_NAME).list("image");
+    if (images && images.length > 0) {
+      const imagePaths = images.map((f) => `image/${f.name}`);
+      await client.storage.from(BUCKET_NAME).remove(imagePaths);
+    }
+
+    // List and delete all videos
+    const { data: videos } = await client.storage.from(BUCKET_NAME).list("video");
+    if (videos && videos.length > 0) {
+      const videoPaths = videos.map((f) => `video/${f.name}`);
+      await client.storage.from(BUCKET_NAME).remove(videoPaths);
+    }
+
+    console.log("Storage cleared successfully");
+    return true;
+  } catch (error) {
+    console.error("Failed to clear storage:", error);
+    return false;
+  }
+}
+
+/**
+ * Check storage quota and warn if approaching limit
+ * Free tier is typically 1GB
+ */
+export async function checkStorageQuota(): Promise<{
+  used: number;
+  limit: number;
+  percentUsed: number;
+  warning: boolean;
+} | null> {
+  const stats = await getStorageStats();
+  if (!stats) return null;
+
+  const limit = 1024 * 1024 * 1024; // 1GB free tier
+  const percentUsed = (stats.totalSize / limit) * 100;
+
+  return {
+    used: stats.totalSize,
+    limit,
+    percentUsed,
+    warning: percentUsed > 80,
+  };
+}

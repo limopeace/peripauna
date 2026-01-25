@@ -162,7 +162,8 @@ export async function POST(request: NextRequest) {
       predictionId,
       promptValidation.sanitized,
       body.negativePrompt,
-      body.settings
+      body.settings,
+      body.referenceUrl
     );
 
     return NextResponse.json(
@@ -187,13 +188,42 @@ export async function POST(request: NextRequest) {
 }
 
 /**
+ * Extract base64 data from image URL (data URL or fetch from HTTPS)
+ */
+async function getImageBase64(imageUrl: string): Promise<string | null> {
+  try {
+    // Handle data URLs
+    if (imageUrl.startsWith("data:image/")) {
+      const base64Match = imageUrl.match(/^data:image\/[^;]+;base64,(.+)$/);
+      return base64Match ? base64Match[1] : null;
+    }
+
+    // Handle HTTPS URLs - fetch and convert to base64
+    if (imageUrl.startsWith("https://") || imageUrl.startsWith("http://")) {
+      const response = await fetch(imageUrl);
+      if (!response.ok) return null;
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      return buffer.toString("base64");
+    }
+
+    return null;
+  } catch (error) {
+    console.error("Error fetching reference image:", error);
+    return null;
+  }
+}
+
+/**
  * Generate image asynchronously using Gemini API
+ * Supports both text-to-image and image-to-image (with reference)
  */
 async function generateImageAsync(
   predictionId: string,
   prompt: string,
   negativePrompt: string | undefined,
-  settings: ImageSettings
+  settings: ImageSettings,
+  referenceUrl?: string
 ) {
   const prediction = predictions.get(predictionId);
   if (!prediction) return;
@@ -220,26 +250,71 @@ async function generateImageAsync(
 
     let response: Response;
     try {
-      // Build minimal request body - only required parameters
-      const requestBody = {
-        instances: [{ prompt: geminiPrompt }],
-        parameters: {
-          sampleCount: 1,
-          aspectRatio: aspectRatioMap[settings.aspectRatio] || "1:1",
-        },
-      };
+      // Check if we have a reference image for image-to-image generation
+      let referenceBase64: string | null = null;
+      if (referenceUrl) {
+        referenceBase64 = await getImageBase64(referenceUrl);
+      }
 
-      response = await fetch(
-        `${GEMINI_API_BASE}/models/imagen-4.0-generate-001:predict?key=${GEMINI_API_KEY}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
+      // Use Gemini 2.0 Flash for image-to-image (native multimodal)
+      // or Imagen 4.0 for text-to-image
+      if (referenceBase64) {
+        // Image-to-image using Gemini 2.0 Flash (multimodal generation)
+        const requestBody = {
+          contents: [
+            {
+              parts: [
+                {
+                  inline_data: {
+                    mime_type: "image/png",
+                    data: referenceBase64,
+                  },
+                },
+                {
+                  text: `Transform this image based on the following prompt: ${geminiPrompt}. Generate a new image that incorporates the style and content of the reference while applying the requested changes.`,
+                },
+              ],
+            },
+          ],
+          generationConfig: {
+            responseModalities: ["IMAGE", "TEXT"],
+            responseMimeType: "image/png",
           },
-          body: JSON.stringify(requestBody),
-          signal: controller.signal,
-        }
-      );
+        };
+
+        response = await fetch(
+          `${GEMINI_API_BASE}/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(requestBody),
+            signal: controller.signal,
+          }
+        );
+      } else {
+        // Text-to-image using Imagen 4.0
+        const requestBody = {
+          instances: [{ prompt: geminiPrompt }],
+          parameters: {
+            sampleCount: 1,
+            aspectRatio: aspectRatioMap[settings.aspectRatio] || "1:1",
+          },
+        };
+
+        response = await fetch(
+          `${GEMINI_API_BASE}/models/imagen-4.0-generate-001:predict?key=${GEMINI_API_KEY}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(requestBody),
+            signal: controller.signal,
+          }
+        );
+      }
     } catch (error) {
       clearTimeout(timeoutId);
       if ((error as Error).name === "AbortError") {
@@ -262,12 +337,26 @@ async function generateImageAsync(
 
     const result = await response.json();
 
-    // Extract image from response
+    // Extract image from response - handle both Imagen and Gemini 2.0 formats
     if (result.predictions && result.predictions[0]?.bytesBase64Encoded) {
-      // Convert base64 to data URL
+      // Imagen 4.0 format
       const imageData = result.predictions[0].bytesBase64Encoded;
       prediction.output = `data:image/png;base64,${imageData}`;
       prediction.status = "succeeded";
+    } else if (result.candidates?.[0]?.content?.parts) {
+      // Gemini 2.0 Flash format - find the image part
+      const parts = result.candidates[0].content.parts;
+      const imagePart = parts.find((p: { inline_data?: { mime_type: string; data: string } }) =>
+        p.inline_data?.mime_type?.startsWith("image/")
+      );
+      if (imagePart?.inline_data?.data) {
+        const mimeType = imagePart.inline_data.mime_type || "image/png";
+        prediction.output = `data:${mimeType};base64,${imagePart.inline_data.data}`;
+        prediction.status = "succeeded";
+      } else {
+        prediction.status = "failed";
+        prediction.error = "No image data in response";
+      }
     } else {
       prediction.status = "failed";
       prediction.error = "No image data in response";

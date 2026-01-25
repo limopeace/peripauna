@@ -1,5 +1,5 @@
 import { openDB, DBSchema, IDBPDatabase } from "idb";
-import { GenerationRecord, UsageRecord, DownloadRecord } from "@/types/history";
+import { GenerationRecord, UsageRecord, DownloadRecord, SavedWorkflow } from "@/types/history";
 
 // ============================================
 // IndexedDB Schema
@@ -35,10 +35,19 @@ interface FloraHistoryDB extends DBSchema {
       "by-generationId": string;
     };
   };
+  workflows: {
+    key: string;
+    value: SavedWorkflow;
+    indexes: {
+      "by-name": string;
+      "by-date": Date;
+      "by-favorite": number; // 0 or 1
+    };
+  };
 }
 
 const DB_NAME = "flora-history";
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Bumped for workflows store
 
 let dbInstance: IDBPDatabase<FloraHistoryDB> | null = null;
 
@@ -80,8 +89,15 @@ export async function getDB(): Promise<IDBPDatabase<FloraHistoryDB>> {
         downloadsStore.createIndex("by-generationId", "generationId");
       }
 
-      // Future migrations go here
-      // if (oldVersion < 2) { ... }
+      // Version 2: Add workflows store
+      if (oldVersion < 2) {
+        const workflowsStore = db.createObjectStore("workflows", {
+          keyPath: "id",
+        });
+        workflowsStore.createIndex("by-name", "name");
+        workflowsStore.createIndex("by-date", "updatedAt");
+        workflowsStore.createIndex("by-favorite", "favorite");
+      }
     },
   });
 
@@ -340,4 +356,77 @@ export async function importData(data: {
     }
     await tx.done;
   }
+}
+
+// ============================================
+// Workflow Records CRUD
+// ============================================
+
+export async function saveWorkflow(workflow: SavedWorkflow): Promise<string> {
+  const db = await getDB();
+  await db.put("workflows", workflow);
+  return workflow.id;
+}
+
+export async function getWorkflow(id: string): Promise<SavedWorkflow | undefined> {
+  const db = await getDB();
+  return db.get("workflows", id);
+}
+
+export async function updateWorkflow(
+  id: string,
+  updates: Partial<SavedWorkflow>
+): Promise<void> {
+  const db = await getDB();
+  const existing = await db.get("workflows", id);
+  if (existing) {
+    await db.put("workflows", {
+      ...existing,
+      ...updates,
+      updatedAt: new Date(),
+    });
+  }
+}
+
+export async function deleteWorkflow(id: string): Promise<void> {
+  const db = await getDB();
+  await db.delete("workflows", id);
+}
+
+export async function getAllWorkflows(): Promise<SavedWorkflow[]> {
+  const db = await getDB();
+  const all = await db.getAll("workflows");
+  // Sort by updated date descending (newest first)
+  return all.sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  );
+}
+
+export async function getFavoriteWorkflows(): Promise<SavedWorkflow[]> {
+  const db = await getDB();
+  const results = await db.getAllFromIndex(
+    "workflows",
+    "by-favorite",
+    1 as unknown as number
+  );
+  return results.sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  );
+}
+
+export async function toggleWorkflowFavorite(id: string): Promise<boolean> {
+  const db = await getDB();
+  const workflow = await db.get("workflows", id);
+  if (workflow) {
+    workflow.favorite = !workflow.favorite;
+    workflow.updatedAt = new Date();
+    await db.put("workflows", workflow);
+    return workflow.favorite;
+  }
+  return false;
+}
+
+export async function clearAllWorkflows(): Promise<void> {
+  const db = await getDB();
+  await db.clear("workflows");
 }
