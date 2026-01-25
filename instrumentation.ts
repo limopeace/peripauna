@@ -10,7 +10,7 @@ export async function register() {
     const isDevelopment = process.env.NODE_ENV !== "production";
     const isTestMode = process.env.TEST_MODE === "true";
 
-    console.log("🚀 Flora Fauna AI - Server Starting");
+    console.log("🚀 Peripauna - Server Starting");
     console.log(`   Environment: ${process.env.NODE_ENV || "development"}`);
     console.log(`   Test Mode: ${isTestMode ? "ON" : "OFF"}`);
 

@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Flora Fauna - AI Generation Canvas",
+  title: "Peripauna - AI Generation Canvas",
   description: "Visual workflow canvas for AI image and video generation",
 };
 

@@ -19,12 +19,12 @@ export interface ImageSettings {
 export interface VideoSettings {
   model: string;
   modelVersion?: string;
-  duration: number; // seconds
-  resolution: "720p" | "1080p" | "4k";
+  duration: number; // seconds (5-10 for Seedance models)
+  resolution: "480p" | "720p" | "1080p" | "4k"; // Note: Seedance 1.5 Pro only supports 480p, 720p
   fps: number;
   cameraMovement?: "static" | "pan_left" | "pan_right" | "zoom_in" | "zoom_out" | "tilt_up" | "tilt_down";
   seed?: number;
-  draft?: boolean; // Fast draft mode for quick previews
+  draft?: boolean; // Fast draft mode for quick previews (uses 480p)
 }
 
 export interface UpscaleSettings {

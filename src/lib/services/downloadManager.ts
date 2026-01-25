@@ -85,6 +85,36 @@ function isDataUrl(url: string): boolean {
 }
 
 /**
+ * Check if URL is a same-origin or localhost URL
+ */
+function isSameOrigin(url: string): boolean {
+  try {
+    const urlObj = new URL(url);
+    const currentOrigin = typeof window !== "undefined" ? window.location.origin : "";
+    return urlObj.origin === currentOrigin ||
+           urlObj.hostname === "localhost" ||
+           urlObj.hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Download a file directly via anchor tag (bypasses CORS for external URLs)
+ */
+function downloadViaDirect(url: string, filename: string): void {
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  // For cross-origin, the download attribute may not work, but at least it opens the file
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+/**
  * Download a generation output with tracking
  */
 export async function downloadGeneration(
@@ -98,42 +128,67 @@ export async function downloadGeneration(
   const filename = generateFilename(record);
 
   try {
-    let blob: Blob;
+    let blob: Blob | null = null;
 
-    // Handle data URLs differently from regular URLs
+    // Handle data URLs - can convert to blob
     if (isDataUrl(record.outputUrl)) {
       blob = dataUrlToBlob(record.outputUrl);
-    } else {
-      // Fetch remote URL
+    }
+    // Handle same-origin URLs - can fetch
+    else if (isSameOrigin(record.outputUrl)) {
       const response = await fetch(record.outputUrl);
       if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
       blob = await response.blob();
     }
+    // Handle cross-origin URLs - use direct download (CORS bypass)
+    else {
+      // For cross-origin URLs (like BytePlus video URLs),
+      // we can't fetch due to CORS, so use direct download
+      downloadViaDirect(record.outputUrl, filename);
 
-    const blobUrl = URL.createObjectURL(blob);
+      // Record the download (without file size since we can't measure it)
+      const downloadRecord: DownloadRecord = {
+        id: uuidv4(),
+        generationId: record.id,
+        filename,
+        downloadedAt: new Date(),
+        fileSize: 0, // Unknown for cross-origin
+        format: record.type === "image" ? "png" : "mp4",
+      };
 
-    // Trigger download
-    const link = document.createElement("a");
-    link.href = blobUrl;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      await addDownloadRecord(downloadRecord);
+      return downloadRecord;
+    }
 
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+    // For data URLs and same-origin URLs, create blob URL and download
+    if (blob) {
+      const blobUrl = URL.createObjectURL(blob);
 
-    // Record the download
-    const downloadRecord: DownloadRecord = {
-      id: uuidv4(),
-      generationId: record.id,
-      filename,
-      downloadedAt: new Date(),
-      fileSize: blob.size,
-      format: record.type === "image" ? "png" : "mp4",
-    };
+      // Trigger download
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
 
-    await addDownloadRecord(downloadRecord);
-    return downloadRecord;
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+
+      // Record the download
+      const downloadRecord: DownloadRecord = {
+        id: uuidv4(),
+        generationId: record.id,
+        filename,
+        downloadedAt: new Date(),
+        fileSize: blob.size,
+        format: record.type === "image" ? "png" : "mp4",
+      };
+
+      await addDownloadRecord(downloadRecord);
+      return downloadRecord;
+    }
+
+    return null;
   } catch (error) {
     console.error("Download failed:", error);
     throw error;
@@ -166,17 +221,31 @@ export async function downloadGenerationsAsZip(
     }
 
     try {
-      let blob: Blob;
+      let blob: Blob | null = null;
 
-      // Handle data URLs differently from regular URLs
+      // Handle data URLs - can convert to blob
       if (isDataUrl(record.outputUrl)) {
         blob = dataUrlToBlob(record.outputUrl);
-      } else {
+      }
+      // Handle same-origin URLs - can fetch
+      else if (isSameOrigin(record.outputUrl)) {
         const response = await fetch(record.outputUrl);
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
         blob = await response.blob();
+      }
+      // Cross-origin URLs can't be added to ZIP due to CORS
+      else {
+        errors.push(`${record.id}: Cross-origin URL (use individual download)`);
+        failedCount++;
+        continue;
+      }
+
+      if (!blob) {
+        errors.push(`${record.id}: Could not create blob`);
+        failedCount++;
+        continue;
       }
 
       const filename = generateFilename(record);

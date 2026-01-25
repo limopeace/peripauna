@@ -8,8 +8,8 @@ export default function Home() {
       <header className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Palette className="text-primary" size={28} />
-            <span className="font-bold text-xl">Flora Fauna</span>
+            <img src="/logo.svg" alt="Peripauna" className="w-7 h-7" />
+            <span className="font-bold text-xl">Peripauna</span>
           </div>
           <Link
             href="/canvas"
@@ -85,7 +85,7 @@ export default function Home() {
       {/* Footer */}
       <footer className="border-t mt-20">
         <div className="max-w-6xl mx-auto px-6 py-8 text-center text-sm text-muted-foreground">
-          Flora Fauna Clone - Built with Next.js, React Flow, and Zustand
+          Peripauna Clone - Built with Next.js, React Flow, and Zustand
         </div>
       </footer>
     </div>

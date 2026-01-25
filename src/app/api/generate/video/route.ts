@@ -30,16 +30,21 @@ interface GenerateVideoRequest {
 }
 
 // BytePlus Content Generation API request format
-// For video generation with first/last frame control, use specific image types
+// For video generation with first/last frame control, use image_url type with role field
+// Supported types: text, image_url, audio_url, draft_task
+// Ref: https://docs.byteplus.com/en/docs/ModelArk/1520757
 type BytePlusContentItem =
   | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string } }
-  | { type: "first_frame_image"; image_url: { url: string } }
-  | { type: "last_frame_image"; image_url: { url: string } };
+  | { type: "image_url"; image_url: { url: string }; role?: "first_frame" | "last_frame" };
 
 interface BytePlusVideoRequest {
   model: string;
   content: BytePlusContentItem[];
+  // Seedance 1.5 Pro parameters (outside content array)
+  resolution?: "480p" | "720p";
+  ratio?: "16:9" | "4:3" | "1:1" | "3:4" | "9:16" | "21:9" | "adaptive";
+  duration?: number; // 2-12 seconds
+  generate_audio?: boolean;
 }
 
 // BytePlus Content Generation API response format
@@ -307,25 +312,33 @@ export async function POST(request: NextRequest) {
     }
 
     // Map model names to BytePlus endpoint IDs
+    // Seedance 1.5 Pro: doubao-seedance-1-5-pro-251215
+    // Seedance 1.0 Pro: seedance-1-0-pro-250528
+    // Seedance 1.0 Lite: seedance-1-0-lite-i2v-250428
     const modelMap: Record<string, string> = {
-      "seedance-1.0-lite": "ep-20260123184449-6tkbf",
-      "seedance-1.5-pro": "ep-20260123184449-6tkbf",
+      "seedance-1.0-lite": "ep-20260123184449-6tkbf", // Using configured endpoint
+      "seedance-1.5-pro": "ep-20260123184449-6tkbf", // Using configured endpoint
     };
 
-    // Model-specific duration constraints
-    // Note: Both seedance models currently use the same BytePlus endpoint (ep-20260123184449-6tkbf)
-    // which is Seedance 1.5 Pro and only supports 5, 10, or 15 second durations (not 3)
+    // Model-specific duration constraints (2-12 seconds for Seedance models)
     const modelDurationConstraints: Record<string, number[]> = {
-      "seedance-1.5-pro": [5, 10, 15],
-      "seedance-1.0-lite": [5, 10, 15], // Same as Pro since they share the same endpoint
+      "seedance-1.5-pro": [5, 10], // Seedance 1.5 Pro: 5 or 10 seconds typical
+      "seedance-1.0-lite": [5, 10], // Seedance 1.0 Lite: same constraints
     };
 
-    // Build prompt with parameters (BytePlus uses -- parameters in text)
-    const resolution = body.settings.resolution || "720p";
+    // Model-specific resolution constraints
+    // Seedance 1.5 Pro only supports 480p and 720p (NOT 1080p)
+    const modelResolutionConstraints: Record<string, string[]> = {
+      "seedance-1.5-pro": ["480p", "720p"],
+      "seedance-1.0-lite": ["480p", "720p", "1080p"],
+    };
+
+    // Build request parameters
+    let resolution = body.settings.resolution || "720p";
     let duration = body.settings.duration || 5;
 
     // Debug: Log incoming values
-    console.log(`Video generation request - model: ${body.settings.model}, duration: ${duration}`);
+    console.log(`Video generation request - model: ${body.settings.model}, duration: ${duration}, resolution: ${resolution}`);
 
     // Validate duration against model constraints
     const allowedDurations = modelDurationConstraints[body.settings.model];
@@ -339,58 +352,71 @@ export async function POST(request: NextRequest) {
       );
       console.log(`Adjusted duration from ${originalDuration}s to ${duration}s for model ${body.settings.model}`);
     }
-    const isDraft = body.settings.draft || false;
-    let promptWithParams = promptValidation.sanitized;
-    promptWithParams += ` --duration ${duration}`;
-    if (isDraft) {
-      promptWithParams += ` --quality draft`;
-    }
-    if (body.settings.seed) {
-      promptWithParams += ` --seed ${body.settings.seed}`;
-    }
-    // Camera movement control
-    if (body.settings.cameraMovement && body.settings.cameraMovement !== "static") {
-      promptWithParams += ` --camerafixed false`;
-    } else {
-      promptWithParams += ` --camerafixed true`;
+
+    // Validate resolution against model constraints
+    const allowedResolutions = modelResolutionConstraints[body.settings.model];
+    if (allowedResolutions && !allowedResolutions.includes(resolution)) {
+      const originalResolution = resolution;
+      // Default to 720p if current resolution not supported
+      resolution = allowedResolutions.includes("720p") ? "720p" : allowedResolutions[0];
+      console.log(`Adjusted resolution from ${originalResolution} to ${resolution} for model ${body.settings.model}`);
     }
 
+    const isDraft = body.settings.draft || false;
+    const cameraFixed = !body.settings.cameraMovement || body.settings.cameraMovement === "static";
+
+    // For Seedance 1.5 Pro, use simple text prompt without inline parameters
+    // Parameters are passed separately in the request body
+    const promptText = promptValidation.sanitized;
+
     // Prepare BytePlus Content Generation API request
+    // Use type: "image_url" with role field for first/last frame
+    // Ref: https://gptproto-398e2883.mintlify.app/docs/allapi/Doubao/doubao-seedance-1-5-pro-251215
     const contentItems: BytePlusContentItem[] = [
-      { type: "text", text: promptWithParams }
+      { type: "text", text: promptText }
     ];
 
     // Add images for video generation
-    // For before/after transitions: use first_frame_image and last_frame_image types
-    // For single image-to-video: use image_url type
+    // For before/after transitions: use image_url with role: "first_frame" and "last_frame"
+    // For single image-to-video: use image_url with role: "first_frame"
     if (processedBeforeImages.length > 0 && processedAfterImages.length > 0) {
-      // Before/after transition: use specific frame types for BytePlus API
-      console.log("Adding before/after images for transition video (first_frame_image + last_frame_image)");
+      // Before/after transition: first frame + last frame
+      console.log("Adding before/after images for transition video (first_frame + last_frame roles)");
       contentItems.push({
-        type: "first_frame_image",
-        image_url: { url: processedBeforeImages[0] }
+        type: "image_url",
+        image_url: { url: processedBeforeImages[0] },
+        role: "first_frame"
       });
       contentItems.push({
-        type: "last_frame_image",
-        image_url: { url: processedAfterImages[0] }
+        type: "image_url",
+        image_url: { url: processedAfterImages[0] },
+        role: "last_frame"
       });
     } else if (processedBeforeImages.length > 0) {
       // Only before image (start frame only)
-      contentItems.push({
-        type: "first_frame_image",
-        image_url: { url: processedBeforeImages[0] }
-      });
-    } else if (processedSourceImages.length > 0) {
-      // Standard image-to-video with source image
+      console.log("Adding before image as first_frame");
       contentItems.push({
         type: "image_url",
-        image_url: { url: processedSourceImages[0] }
+        image_url: { url: processedBeforeImages[0] },
+        role: "first_frame"
+      });
+    } else if (processedSourceImages.length > 0) {
+      // Standard image-to-video with source image as first frame
+      console.log("Adding source image as first_frame");
+      contentItems.push({
+        type: "image_url",
+        image_url: { url: processedSourceImages[0] },
+        role: "first_frame"
       });
     }
 
+    // Build request with parameters outside content array (Seedance 1.5 Pro format)
     const byteplusRequest: BytePlusVideoRequest = {
       model: modelMap[body.settings.model] || body.settings.model,
       content: contentItems,
+      resolution: resolution as "480p" | "720p",
+      duration: duration,
+      generate_audio: !isDraft, // Enable audio for non-draft videos
     };
 
     // Call BytePlus ModelArk Content Generation API with timeout

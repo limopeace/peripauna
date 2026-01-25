@@ -9,7 +9,8 @@ export interface ModelPricingConfig {
   provider: string;
   pricingUrl: string; // Official docs link for transparency
   costPerGeneration?: number; // Fixed cost per call (images)
-  costPerSecond?: number; // For video (by duration)
+  costPerSecond?: number; // For video (by duration) at standard quality
+  costPerSecondDraft?: number; // For video draft mode (480p, no audio)
   costPerPixel?: number; // For high-res images (future)
   costPerToken?: number; // For prompt enhancement
   currency: "USD";
@@ -126,26 +127,36 @@ export const IMAGE_MODEL_PRICING: ModelPricing = {
 // ============================================
 // Video Models - BytePlus/Replicate Pricing
 // ============================================
+// Seedance 1.5 Pro pricing (from official docs):
+// - $1.2/M tokens (without audio) or $2.4/M tokens (with audio)
+// - Token formula: (width × height × fps × duration) / 1024
+// - 720p 5s with audio ≈ $0.26, 480p 5s draft ≈ $0.10
+// Ref: https://fal.ai/models/fal-ai/bytedance/seedance/v1.5/pro/image-to-video
 
 export const VIDEO_MODEL_PRICING: ModelPricing = {
   // Seedance Models (BytePlus)
+  // Pricing based on token consumption: (width × height × fps × duration) / 1024
+  // Standard (720p with audio): $2.4/M tokens ≈ $0.052/s
+  // Draft (480p no audio): $1.2/M tokens ≈ $0.012/s
   "seedance-1.0-lite": {
     name: "Seedance 1.0 Lite",
     provider: "BytePlus ModelArk",
-    pricingUrl: "https://console.byteplus.com/ark/pricing",
-    costPerSecond: 0.02,
+    pricingUrl: "https://docs.byteplus.com/en/docs/ModelArk/1544106",
+    costPerSecond: 0.018, // ~$0.09 for 5s at 720p
+    costPerSecondDraft: 0.008, // ~$0.04 for 5s at 480p
     currency: "USD",
-    lastUpdated: new Date("2025-01-01"),
-    notes: "720p, fast generation, cost-effective",
+    lastUpdated: new Date("2026-01-26"),
+    notes: "480p-1080p, fast generation, cost-effective. Duration: 5-10s",
   },
   "seedance-1.5-pro": {
     name: "Seedance 1.5 Pro",
     provider: "BytePlus ModelArk",
-    pricingUrl: "https://console.byteplus.com/ark/pricing",
-    costPerSecond: 0.05,
+    pricingUrl: "https://docs.byteplus.com/en/docs/ModelArk/1544106",
+    costPerSecond: 0.052, // ~$0.26 for 5s at 720p with audio
+    costPerSecondDraft: 0.012, // ~$0.06 for 5s at 480p no audio
     currency: "USD",
-    lastUpdated: new Date("2025-01-01"),
-    notes: "1080p, best quality",
+    lastUpdated: new Date("2026-01-26"),
+    notes: "720p max, audio sync, first/last frame I2V. Duration: 5-10s",
   },
 
   // Runway Models

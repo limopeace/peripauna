@@ -35,10 +35,11 @@ function VideoNodeComponent({ id, data, selected }: NodeProps) {
   // Get node-specific history
   const nodeHistory = records.filter((r) => r.nodeId === id);
 
-  // Calculate estimated cost
+  // Calculate estimated cost (accounts for draft mode pricing)
   const estimatedCost = calculateVideoGenerationCost(
     nodeData.settings.model,
-    nodeData.settings.duration
+    nodeData.settings.duration,
+    nodeData.settings
   );
 
   const handleDelete = useCallback(() => {
@@ -256,9 +257,13 @@ function VideoNodeComponent({ id, data, selected }: NodeProps) {
             const newModel = e.target.value;
             handleSettingChange("model", newModel);
             // Auto-adjust duration if switching to Seedance models with 3 sec selected
-            // Both Seedance Lite and Pro use the same endpoint which only supports 5+ seconds
             if (newModel.startsWith("seedance") && nodeData.settings.duration === 3) {
               handleSettingChange("duration", 5);
+            }
+            // Auto-adjust resolution for Seedance 1.5 Pro (only supports 480p, 720p)
+            if (newModel === "seedance-1.5-pro" &&
+                (nodeData.settings.resolution === "1080p" || nodeData.settings.resolution === "4k")) {
+              handleSettingChange("resolution", "720p");
             }
           }}
           disabled={nodeData.isGenerating}
@@ -361,9 +366,25 @@ function VideoNodeComponent({ id, data, selected }: NodeProps) {
             disabled={nodeData.isGenerating}
             className="w-full mt-1 px-2 py-1 text-xs bg-background border border-input rounded focus:outline-none"
           >
-            <option value="720p">720p</option>
-            <option value="1080p">1080p</option>
-            <option value="4k">4K</option>
+            {/* Seedance 1.5 Pro only supports 480p and 720p */}
+            {nodeData.settings.model === "seedance-1.5-pro" ? (
+              <>
+                <option value="480p">480p (Draft)</option>
+                <option value="720p">720p</option>
+              </>
+            ) : nodeData.settings.model === "seedance-1.0-lite" ? (
+              <>
+                <option value="480p">480p</option>
+                <option value="720p">720p</option>
+                <option value="1080p">1080p</option>
+              </>
+            ) : (
+              <>
+                <option value="720p">720p</option>
+                <option value="1080p">1080p</option>
+                <option value="4k">4K</option>
+              </>
+            )}
           </select>
         </div>
       </div>

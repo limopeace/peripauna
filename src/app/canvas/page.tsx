@@ -186,8 +186,8 @@ function CanvasContent() {
           {/* Left: Logo & Add Nodes */}
           <div className="flex items-center gap-4">
             <h1 className="font-bold text-lg flex items-center gap-2">
-              <Palette className="text-primary" size={22} />
-              Flora Fauna
+              <img src="/logo.svg" alt="Peripauna" className="w-6 h-6" />
+              Peripauna
             </h1>
 
             <div className="h-6 w-px bg-border" />

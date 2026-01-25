@@ -57,6 +57,7 @@ export function calculateImageGenerationCost(
 
 /**
  * Calculate cost for video generation
+ * Accounts for draft mode (480p, no audio) vs standard (720p, with audio)
  */
 export function calculateVideoGenerationCost(
   model: string,
@@ -74,7 +75,11 @@ export function calculateVideoGenerationCost(
     };
   }
 
-  const costPerSecond = pricing.costPerSecond || 0;
+  // Use draft pricing if draft mode is enabled and draft pricing exists
+  const isDraft = settings?.draft || false;
+  const costPerSecond = isDraft && pricing.costPerSecondDraft
+    ? pricing.costPerSecondDraft
+    : (pricing.costPerSecond || 0);
   const cost = costPerSecond * durationSeconds;
 
   return {
@@ -85,6 +90,7 @@ export function calculateVideoGenerationCost(
       perSecond: costPerSecond,
       duration: durationSeconds,
     },
+    note: isDraft ? "Draft mode (480p, no audio)" : undefined,
   };
 }
 

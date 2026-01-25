@@ -1,5 +1,5 @@
 /**
- * Structured Logger for Flora Fauna AI
+ * Structured Logger for Peripauna
  * Supports console logging and integration with external monitoring services
  */
 
