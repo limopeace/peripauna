@@ -13,6 +13,7 @@ export interface ImageSettings {
   seed?: number;
   outputFormat: "png" | "jpg" | "webp";
   outputQuality: number;
+  resolution?: "1K" | "2K" | "4K"; // For Gemini 3 Pro
 }
 
 export interface VideoSettings {
@@ -40,6 +41,7 @@ export interface PromptNodeData {
   label: string;
   prompt: string;
   negativePrompt?: string;
+  enhancementModel?: "none" | "haiku" | "sonnet" | "opus";
   [key: string]: unknown;
 }
 
@@ -148,7 +150,7 @@ export const DEFAULT_IMAGE_SETTINGS: ImageSettings = {
 export const DEFAULT_VIDEO_SETTINGS: VideoSettings = {
   model: "seedance-1.5-pro",
   duration: 5,
-  resolution: "720p",
+  resolution: "1080p",
   fps: 24,
   cameraMovement: "static",
   draft: false,

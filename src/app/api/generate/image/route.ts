@@ -256,9 +256,53 @@ async function generateImageAsync(
         referenceBase64 = await getImageBase64(referenceUrl);
       }
 
-      // Use Gemini 2.0 Flash for image-to-image (native multimodal)
-      // or Imagen 4.0 for text-to-image
-      if (referenceBase64) {
+      // Handle Gemini 3 Pro with resolution selection
+      if (settings.model.startsWith("gemini-3-pro-image")) {
+        const resolutionMap: Record<string, string> = {
+          "1K": "1024x1024",
+          "2K": "2048x2048",
+          "4K": "4096x4096",
+        };
+        const resolution = settings.resolution || "1K";
+        const resolutionSize = resolutionMap[resolution];
+
+        const requestBody = {
+          contents: [
+            {
+              parts: referenceBase64
+                ? [
+                    {
+                      inline_data: {
+                        mime_type: "image/png",
+                        data: referenceBase64,
+                      },
+                    },
+                    { text: geminiPrompt },
+                  ]
+                : [{ text: geminiPrompt }],
+            },
+          ],
+          generationConfig: {
+            responseModalities: ["IMAGE"],
+            responseMimeType: "image/png",
+            imageSize: resolutionSize,
+          },
+        };
+
+        response = await fetch(
+          `${GEMINI_API_BASE}/models/gemini-3-pro-image-preview:generateContent?key=${GEMINI_API_KEY}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(requestBody),
+            signal: controller.signal,
+          }
+        );
+      } else if (referenceBase64) {
+        // Use Gemini 2.0 Flash for image-to-image (native multimodal)
+        // or Imagen 4.0 for text-to-image
         // Image-to-image using Gemini 2.0 Flash (multimodal generation)
         const requestBody = {
           contents: [

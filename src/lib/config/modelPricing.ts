@@ -11,6 +11,7 @@ export interface ModelPricingConfig {
   costPerGeneration?: number; // Fixed cost per call (images)
   costPerSecond?: number; // For video (by duration)
   costPerPixel?: number; // For high-res images (future)
+  costPerToken?: number; // For prompt enhancement
   currency: "USD";
   lastUpdated: Date;
   notes?: string;
@@ -90,6 +91,35 @@ export const IMAGE_MODEL_PRICING: ModelPricing = {
     currency: "USD",
     lastUpdated: new Date("2025-01-01"),
     notes: "Best for text in images",
+  },
+
+  // Gemini 3 Pro Image (2026 model with multi-resolution support)
+  "gemini-3-pro-image-1k": {
+    name: "Gemini 3 Pro Image (1K)",
+    provider: "Google AI",
+    pricingUrl: "https://ai.google.dev/pricing",
+    costPerGeneration: 0.039,
+    currency: "USD",
+    lastUpdated: new Date("2026-01-25"),
+    notes: "1024x1024, professional quality, multi-reference support",
+  },
+  "gemini-3-pro-image-2k": {
+    name: "Gemini 3 Pro Image (2K)",
+    provider: "Google AI",
+    pricingUrl: "https://ai.google.dev/pricing",
+    costPerGeneration: 0.134,
+    currency: "USD",
+    lastUpdated: new Date("2026-01-25"),
+    notes: "2048x2048, high resolution, multi-reference support",
+  },
+  "gemini-3-pro-image-4k": {
+    name: "Gemini 3 Pro Image (4K)",
+    provider: "Google AI",
+    pricingUrl: "https://ai.google.dev/pricing",
+    costPerGeneration: 0.240,
+    currency: "USD",
+    lastUpdated: new Date("2026-01-25"),
+    notes: "4096x4096, maximum quality, multi-reference support",
   },
 };
 
@@ -267,3 +297,34 @@ export const UPSCALE_MODELS = Object.entries(UPSCALE_MODEL_PRICING).map(
     notes: config.notes,
   })
 );
+
+// ============================================
+// Prompt Enhancement Models (Claude)
+// ============================================
+
+export const ENHANCEMENT_MODELS = {
+  none: {
+    name: "None (Plain Text)",
+    model: null,
+    cost: 0,
+    description: "No enhancement, pass prompt as-is",
+  },
+  haiku: {
+    name: "Claude 3 Haiku",
+    model: "claude-3-haiku-20240307",
+    cost: 0.00025,
+    description: "Fast and cheap ($0.25/MTok input, $1.25/MTok output)",
+  },
+  sonnet: {
+    name: "Claude 3.5 Sonnet",
+    model: "claude-3-5-sonnet-20241022",
+    cost: 0.003,
+    description: "Balanced quality ($3/MTok input, $15/MTok output)",
+  },
+  opus: {
+    name: "Claude 3 Opus",
+    model: "claude-3-opus-20240229",
+    cost: 0.015,
+    description: "Highest quality ($15/MTok input, $75/MTok output)",
+  },
+} as const;

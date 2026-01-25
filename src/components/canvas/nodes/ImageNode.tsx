@@ -227,6 +227,27 @@ function ImageNodeComponent({ id, data, selected }: NodeProps) {
         </select>
       </div>
 
+      {/* Resolution Selection (Gemini 3 Pro only) */}
+      {nodeData.settings.model.startsWith("gemini-3-pro-image") && (
+        <div className="mb-3">
+          <label className="text-xs font-medium text-muted-foreground block mb-1">
+            Resolution
+          </label>
+          <select
+            value={nodeData.settings.resolution || "1K"}
+            onChange={(e) =>
+              handleSettingChange("resolution", e.target.value as "1K" | "2K" | "4K")
+            }
+            disabled={nodeData.isGenerating}
+            className="w-full px-2 py-1.5 text-sm bg-background border border-input rounded-md focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+          >
+            <option value="1K">1K (1024x1024) - $0.039</option>
+            <option value="2K">2K (2048x2048) - $0.134</option>
+            <option value="4K">4K (4096x4096) - $0.240</option>
+          </select>
+        </div>
+      )}
+
       {/* Output Preview */}
       {nodeData.outputUrl && (
         <div className="relative mb-3 group">

@@ -20,7 +20,15 @@ interface EnhancePromptRequest {
   prompt: string;
   type: "image" | "video";
   style?: string;
+  model?: "haiku" | "sonnet" | "opus" | "none";
 }
+
+// Map enhancement model names to Claude API model IDs
+const MODEL_MAP: Record<string, string> = {
+  haiku: "claude-3-haiku-20240307",
+  sonnet: "claude-3-5-sonnet-20241022",
+  opus: "claude-3-opus-20240229",
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -56,6 +64,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Prompt is required" },
         { status: 400, headers }
+      );
+    }
+
+    // Handle plain text passthrough (no model selected)
+    const selectedModel = body.model || "haiku";
+    if (selectedModel === "none") {
+      return NextResponse.json(
+        {
+          originalPrompt: body.prompt,
+          enhancedPrompt: body.prompt,
+          type: body.type,
+          model: "none",
+        },
+        { headers }
       );
     }
 
@@ -130,7 +152,7 @@ Rules:
           "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify({
-          model: "claude-3-haiku-20240307", // Fast and cheap for prompt enhancement
+          model: MODEL_MAP[selectedModel] || MODEL_MAP.haiku,
           max_tokens: 300,
           messages: [
             {
@@ -176,6 +198,7 @@ Rules:
         originalPrompt: body.prompt,
         enhancedPrompt: enhancedPrompt.trim(),
         type: body.type,
+        model: selectedModel,
       },
       { headers }
     );

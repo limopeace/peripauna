@@ -151,6 +151,207 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     },
   },
   {
+    id: "florafauna-workflow",
+    name: "FloraFauna Scene Generator",
+    description: "Generate two scene variations with Gemini 3 Pro and create a video with Seedance Pro 1.5",
+    category: "image-to-video",
+    nodes: [
+      {
+        type: "prompt",
+        position: { x: 100, y: 100 },
+        data: {
+          label: "Scene Prompt 1",
+          prompt: "",
+          negativePrompt: "",
+          enhancementModel: "sonnet",
+        },
+      },
+      {
+        type: "prompt",
+        position: { x: 100, y: 380 },
+        data: {
+          label: "Scene Prompt 2",
+          prompt: "",
+          negativePrompt: "",
+          enhancementModel: "sonnet",
+        },
+      },
+      {
+        type: "image",
+        position: { x: 450, y: 100 },
+        data: {
+          label: "Scene Image 1",
+          settings: {
+            model: "flux-schnell",
+            aspectRatio: "1:1",
+            guidanceScale: 3.5,
+            numInferenceSteps: 4,
+            outputFormat: "png",
+            outputQuality: 90,
+          },
+          isGenerating: false,
+          progress: 0,
+          outputUrl: null,
+        },
+      },
+      {
+        type: "image",
+        position: { x: 450, y: 380 },
+        data: {
+          label: "Scene Image 2",
+          settings: {
+            model: "flux-schnell",
+            aspectRatio: "1:1",
+            guidanceScale: 3.5,
+            numInferenceSteps: 4,
+            outputFormat: "png",
+            outputQuality: 90,
+          },
+          isGenerating: false,
+          progress: 0,
+          outputUrl: null,
+        },
+      },
+      {
+        type: "video",
+        position: { x: 800, y: 240 },
+        data: {
+          label: "Scene Video",
+          settings: {
+            model: "seedance-1.5-pro",
+            duration: 5,
+            resolution: "1080p",
+            fps: 24,
+            cameraMovement: "static",
+          },
+          isGenerating: false,
+          progress: 0,
+          outputUrl: null,
+        },
+      },
+    ],
+    edges: [
+      { sourceIndex: 0, targetIndex: 2 }, // Prompt 1 -> Image 1
+      { sourceIndex: 1, targetIndex: 3 }, // Prompt 2 -> Image 2
+      { sourceIndex: 2, targetIndex: 4 }, // Image 1 -> Video
+      { sourceIndex: 3, targetIndex: 4 }, // Image 2 -> Video
+      { sourceIndex: 0, targetIndex: 4 }, // Prompt 1 -> Video
+      { sourceIndex: 1, targetIndex: 4 }, // Prompt 2 -> Video
+    ],
+    defaults: {
+      imageModel: "flux-schnell",
+      videoModel: "seedance-1.5-pro",
+      videoResolution: "1080p",
+      videoDuration: 5,
+    },
+  },
+  {
+    id: "florafauna-with-character",
+    name: "FloraFauna with Character Reference",
+    description: "Use a character reference image to generate scene variations with Seedance Pro 1.5 video",
+    category: "image-to-video",
+    nodes: [
+      {
+        type: "imageUpload",
+        position: { x: 50, y: 240 },
+        data: {
+          label: "Character Reference",
+          imageUrl: null,
+        },
+      },
+      {
+        type: "prompt",
+        position: { x: 250, y: 100 },
+        data: {
+          label: "Scene Prompt 1",
+          prompt: "",
+          negativePrompt: "",
+          enhancementModel: "sonnet",
+        },
+      },
+      {
+        type: "prompt",
+        position: { x: 250, y: 380 },
+        data: {
+          label: "Scene Prompt 2",
+          prompt: "",
+          negativePrompt: "",
+          enhancementModel: "sonnet",
+        },
+      },
+      {
+        type: "image",
+        position: { x: 550, y: 100 },
+        data: {
+          label: "Scene Image 1",
+          settings: {
+            model: "flux-schnell",
+            aspectRatio: "1:1",
+            guidanceScale: 3.5,
+            numInferenceSteps: 4,
+            outputFormat: "png",
+            outputQuality: 90,
+          },
+          isGenerating: false,
+          progress: 0,
+          outputUrl: null,
+        },
+      },
+      {
+        type: "image",
+        position: { x: 550, y: 380 },
+        data: {
+          label: "Scene Image 2",
+          settings: {
+            model: "flux-schnell",
+            aspectRatio: "1:1",
+            guidanceScale: 3.5,
+            numInferenceSteps: 4,
+            outputFormat: "png",
+            outputQuality: 90,
+          },
+          isGenerating: false,
+          progress: 0,
+          outputUrl: null,
+        },
+      },
+      {
+        type: "video",
+        position: { x: 900, y: 240 },
+        data: {
+          label: "Scene Video",
+          settings: {
+            model: "seedance-1.5-pro",
+            duration: 5,
+            resolution: "1080p",
+            fps: 24,
+            cameraMovement: "static",
+          },
+          isGenerating: false,
+          progress: 0,
+          outputUrl: null,
+        },
+      },
+    ],
+    edges: [
+      { sourceIndex: 0, targetIndex: 3 }, // Character -> Image 1
+      { sourceIndex: 0, targetIndex: 4 }, // Character -> Image 2
+      { sourceIndex: 1, targetIndex: 3 }, // Prompt 1 -> Image 1
+      { sourceIndex: 2, targetIndex: 4 }, // Prompt 2 -> Image 2
+      { sourceIndex: 3, targetIndex: 5 }, // Image 1 -> Video
+      { sourceIndex: 4, targetIndex: 5 }, // Image 2 -> Video
+      { sourceIndex: 0, targetIndex: 5 }, // Character -> Video
+      { sourceIndex: 1, targetIndex: 5 }, // Prompt 1 -> Video
+      { sourceIndex: 2, targetIndex: 5 }, // Prompt 2 -> Video
+    ],
+    defaults: {
+      imageModel: "flux-schnell",
+      videoModel: "seedance-1.5-pro",
+      videoResolution: "1080p",
+      videoDuration: 5,
+    },
+  },
+  {
     id: "image-gen-upscale",
     name: "Generate & Upscale",
     description: "Generate an image from prompt and upscale it to higher resolution",
