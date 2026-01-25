@@ -30,9 +30,12 @@ interface GenerateVideoRequest {
 }
 
 // BytePlus Content Generation API request format
+// For video generation with first/last frame control, use specific image types
 type BytePlusContentItem =
   | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string } };
+  | { type: "image_url"; image_url: { url: string } }
+  | { type: "first_frame_image"; image_url: { url: string } }
+  | { type: "last_frame_image"; image_url: { url: string } };
 
 interface BytePlusVideoRequest {
   model: string;
@@ -358,23 +361,23 @@ export async function POST(request: NextRequest) {
     ];
 
     // Add images for video generation
-    // For before/after transitions: add both images (first frame + last frame)
-    // For single image-to-video: add just the source image
+    // For before/after transitions: use first_frame_image and last_frame_image types
+    // For single image-to-video: use image_url type
     if (processedBeforeImages.length > 0 && processedAfterImages.length > 0) {
-      // Before/after transition: first image is start frame, second is end frame
-      console.log("Adding before/after images for transition video");
+      // Before/after transition: use specific frame types for BytePlus API
+      console.log("Adding before/after images for transition video (first_frame_image + last_frame_image)");
       contentItems.push({
-        type: "image_url",
+        type: "first_frame_image",
         image_url: { url: processedBeforeImages[0] }
       });
       contentItems.push({
-        type: "image_url",
+        type: "last_frame_image",
         image_url: { url: processedAfterImages[0] }
       });
     } else if (processedBeforeImages.length > 0) {
       // Only before image (start frame only)
       contentItems.push({
-        type: "image_url",
+        type: "first_frame_image",
         image_url: { url: processedBeforeImages[0] }
       });
     } else if (processedSourceImages.length > 0) {
