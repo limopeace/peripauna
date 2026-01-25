@@ -9,14 +9,21 @@ import { NextRequest, NextResponse } from "next/server";
 const ARK_API_BASE = "https://ark.ap-southeast.bytepluses.com/api/v3";
 const ARK_API_KEY = process.env.ARK_API_KEY;
 
+// BytePlus Content Generation API response format
+// Docs: https://docs.byteplus.com/en/docs/ModelArk/1521309
 interface BytePlusStatusResponse {
-  task_id: string;
-  status: "pending" | "processing" | "success" | "failed";
-  progress?: number;
-  video_url?: string;
-  error_message?: string;
-  created_at?: string;
-  completed_at?: string;
+  id: string;
+  model: string;
+  status: "submitted" | "running" | "succeeded" | "failed" | "cancelled";
+  created_at: number;
+  updated_at?: number;
+  error?: {
+    code: string;
+    message: string;
+  };
+  output?: {
+    video_url?: string;
+  };
 }
 
 /**
@@ -78,7 +85,8 @@ export async function GET(request: NextRequest) {
 
     let response: Response;
     try {
-      response = await fetch(`${ARK_API_BASE}/video/generation/${taskId}`, {
+      // BytePlus Content Generation API - retrieve task status
+      response = await fetch(`${ARK_API_BASE}/contents/generations/tasks/${taskId}`, {
         method: "GET",
         headers: {
           "Authorization": `Bearer ${ARK_API_KEY}`,
@@ -100,19 +108,22 @@ export async function GET(request: NextRequest) {
     }
 
     if (!response.ok) {
+      const errorBody = await response.text().catch(() => "");
+
+      // Log full error for debugging
+      console.error("BytePlus status API error:", {
+        status: response.status,
+        taskId,
+        errorBody,
+        timestamp: new Date().toISOString(),
+      });
+
       if (response.status === 404) {
         return NextResponse.json(
           { error: "Task not found" },
           { status: 404 }
         );
       }
-
-      // Security: Log internally but don't expose details
-      console.error("BytePlus status API error:", {
-        status: response.status,
-        taskId: taskId?.substring(0, 10) + "...", // Only log partial ID
-        timestamp: new Date().toISOString(),
-      });
 
       return NextResponse.json(
         { error: "Failed to retrieve task status" },
@@ -122,35 +133,46 @@ export async function GET(request: NextRequest) {
 
     const result: BytePlusStatusResponse = await response.json();
 
-    // Map BytePlus status to our internal status format
+    // Debug: Log status response for troubleshooting
+    console.log("BytePlus status response:", {
+      taskId: result.id,
+      status: result.status,
+      hasOutput: !!result.output,
+      videoUrl: result.output?.video_url ? "present" : "none",
+      error: result.error?.message,
+    });
+
+    // Map BytePlus Content Generation API status to our internal format
     const statusMap: Record<string, string> = {
-      "pending": "starting",
-      "processing": "processing",
-      "success": "succeeded",
+      "submitted": "starting",
+      "running": "processing",
+      "succeeded": "succeeded",
       "failed": "failed",
+      "cancelled": "failed",
     };
 
     // Security: Validate video URL if present
     let validatedOutput: string | undefined;
-    if (result.video_url) {
+    const videoUrl = result.output?.video_url;
+    if (videoUrl) {
       try {
-        const parsedUrl = new URL(result.video_url);
+        const parsedUrl = new URL(videoUrl);
         // Only allow HTTPS URLs
         if (parsedUrl.protocol === "https:") {
-          validatedOutput = result.video_url;
+          validatedOutput = videoUrl;
         } else {
-          console.error("Non-HTTPS video URL returned:", result.video_url);
+          console.error("Non-HTTPS video URL returned:", videoUrl);
         }
       } catch (error) {
-        console.error("Invalid video URL returned:", result.video_url);
+        console.error("Invalid video URL returned:", videoUrl);
       }
     }
 
-    // Fix: Use nullish coalescing instead of || to handle progress:0 correctly
-    const progress = result.progress ?? (
-      result.status === "processing" ? 50 :
-      result.status === "success" ? 100 : 0
-    );
+    // Estimate progress based on status
+    const progress =
+      result.status === "submitted" ? 10 :
+      result.status === "running" ? 50 :
+      result.status === "succeeded" ? 100 : 0;
 
     // Security headers
     const headers = new Headers();
@@ -159,11 +181,11 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       {
-        taskId: result.task_id,
+        taskId: result.id,
         status: statusMap[result.status] || result.status,
         progress,
         output: validatedOutput,
-        error: result.error_message,
+        error: result.error?.message,
       },
       { headers }
     );
