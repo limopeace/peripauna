@@ -37,6 +37,7 @@ import { useCanvasStore } from "@/lib/stores/canvasStore";
 import { nodeTypes } from "@/components/canvas/nodes";
 import { HistoryPanel } from "@/components/panels/HistoryPanel";
 import { UsageDashboard } from "@/components/panels/UsageDashboard";
+import { WorkflowsPanel } from "@/components/panels/WorkflowsPanel";
 import { executeWorkflow, cancelWorkflow } from "@/lib/services/workflowExecutor";
 import { downloadProjectExport } from "@/lib/services/projectExporter";
 import { importProjectFromFile, validateImportFile, ImportResult } from "@/lib/services/projectImporter";
@@ -65,7 +66,7 @@ function CanvasContent() {
   const { screenToFlowPosition } = useReactFlow();
 
   // UI State
-  const [rightPanel, setRightPanel] = useState<"history" | "usage" | null>("history");
+  const [rightPanel, setRightPanel] = useState<"history" | "usage" | "workflows" | null>("history");
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState<{ progress: number; message: string } | null>(null);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
@@ -306,6 +307,18 @@ function CanvasContent() {
 
             {/* Panel Toggles */}
             <button
+              onClick={() => setRightPanel(rightPanel === "workflows" ? null : "workflows")}
+              className={cn(
+                "p-2 rounded-md transition-colors",
+                rightPanel === "workflows"
+                  ? "bg-primary text-primary-foreground"
+                  : "hover:bg-muted"
+              )}
+              title="Saved Workflows & Templates"
+            >
+              <Workflow size={16} />
+            </button>
+            <button
               onClick={() => setRightPanel(rightPanel === "history" ? null : "history")}
               className={cn(
                 "p-2 rounded-md transition-colors",
@@ -435,7 +448,12 @@ function CanvasContent() {
         <div className="w-80 border-l bg-card flex flex-col">
           <div className="flex items-center justify-between p-3 border-b">
             <h2 className="font-semibold flex items-center gap-2">
-              {rightPanel === "history" ? (
+              {rightPanel === "workflows" ? (
+                <>
+                  <Workflow size={16} />
+                  Workflows
+                </>
+              ) : rightPanel === "history" ? (
                 <>
                   <History size={16} />
                   History
@@ -455,7 +473,13 @@ function CanvasContent() {
             </button>
           </div>
           <div className="flex-1 overflow-y-auto">
-            {rightPanel === "history" ? <HistoryPanel /> : <UsageDashboard />}
+            {rightPanel === "workflows" ? (
+              <WorkflowsPanel />
+            ) : rightPanel === "history" ? (
+              <HistoryPanel />
+            ) : (
+              <UsageDashboard />
+            )}
           </div>
         </div>
       )}
