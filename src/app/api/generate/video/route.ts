@@ -213,6 +213,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Test mode check
+    const isTestMode = process.env.TEST_MODE === "true";
+
+    if (isTestMode) {
+      console.log("🧪 TEST MODE: Returning mock video task");
+      return NextResponse.json({
+        taskId: `test-task-${Date.now()}`,
+        status: "starting",
+        model: body.settings.model,
+        workflowType: "test-mode",
+        estimatedTime: "5 seconds",
+      });
+    }
+
     // Validate API key
     if (!ARK_API_KEY) {
       console.error("ARK_API_KEY not configured");

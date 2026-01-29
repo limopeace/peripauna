@@ -49,6 +49,40 @@ function validateTaskId(taskId: string | null): { valid: boolean; error?: string
 
 export async function GET(request: NextRequest) {
   try {
+    const searchParams = request.nextUrl.searchParams;
+    const taskId = searchParams.get("taskId");
+
+    // Security: Validate task ID to prevent injection attacks
+    const validation = validateTaskId(taskId);
+    if (!validation.valid) {
+      return NextResponse.json(
+        { error: validation.error },
+        { status: 400 }
+      );
+    }
+
+    // Test mode check
+    const isTestMode = process.env.TEST_MODE === "true";
+
+    if (isTestMode && taskId?.startsWith("test-task-")) {
+      console.log("🧪 TEST MODE: Returning mock video status");
+
+      // Simulate video generation progress
+      const taskAge = Date.now() - parseInt(taskId.split("-").pop() || "0");
+      const progress = Math.min(100, Math.floor((taskAge / 5000) * 100)); // Complete in 5 seconds
+      const isComplete = progress >= 100;
+
+      return NextResponse.json({
+        taskId,
+        status: isComplete ? "succeeded" : "processing",
+        progress,
+        output: isComplete
+          ? "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=1920&h=1080"
+          : undefined,
+        error: undefined,
+      });
+    }
+
     // TODO: Add authentication check and verify task ownership
     // const session = await getServerSession(authOptions);
     // if (!session) {
@@ -61,18 +95,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { error: "Service temporarily unavailable" },
         { status: 503 }
-      );
-    }
-
-    const searchParams = request.nextUrl.searchParams;
-    const taskId = searchParams.get("taskId");
-
-    // Security: Validate task ID to prevent injection attacks
-    const validation = validateTaskId(taskId);
-    if (!validation.valid) {
-      return NextResponse.json(
-        { error: validation.error },
-        { status: 400 }
       );
     }
 
